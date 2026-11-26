@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="zh_CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20width%3D%2264%22%20height%3D%2264%22%20rx%3D%2214%22%20fill%3D%22%230071e3%22%2F%3E%3Cpath%20d%3D%22M12%2041a20%2020%200%201%201%2040%200%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%224.5%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M32%2041l8-8%22%20stroke%3D%22%23fff%22%20stroke-width%3D%224.5%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E">
+<title>UCM 推理加速验收工具</title>
+<style>
+:root{
+  --ink:#1d1d1f;--muted:#86868b;--muted-2:#6e6e73;--line:#e8e8ed;--line-2:#d2d2d7;
+  --bg:#f5f5f7;--card:#fff;--blue:#0071e3;--blue-h:#0077ed;--blue-soft:rgba(0,113,227,.10);
+  --green:#34c759;--red:#ff3b30;--amber:#ff9f0a;
+  --ease:cubic-bezier(.25,.1,.25,1);
+  --shadow-rest:0 1px 2px rgba(0,0,0,.03),0 4px 12px rgba(0,0,0,.04);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",
+  "PingFang SC","HarmonyOS Sans SC","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:1080px;margin:0 auto;padding:0 20px 60px}
+/* ---------- hero ---------- */
+.hero{padding:44px 4px 4px}
+.hero .eyebrow{font-size:12px;letter-spacing:.18em;color:var(--muted);font-weight:600;text-transform:uppercase}
+.hero h1{margin:10px 0 6px;font-size:32px;font-weight:700;letter-spacing:-.022em}
+.hero p{margin:0;color:var(--muted);font-size:14px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.chip{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:5px 13px;font-size:12px;color:var(--muted-2);font-weight:500}
+.chip.mock{background:#fff6e0;border-color:#ffd9a0;color:#8a5300}
+/* ---------- cards ---------- */
+.card{background:var(--card);border-radius:24px;box-shadow:var(--shadow-rest);margin-top:16px;padding:22px 26px}
+.section-title{margin:36px 2px 6px;font-size:21px;font-weight:700;letter-spacing:-.01em;display:flex;align-items:baseline;gap:10px}
+.section-title small{font-size:13px;color:var(--muted);font-weight:400}
+label.field{display:block;font-size:12px;color:var(--muted-2);font-weight:500;margin-bottom:5px}
+input[type=text],input[type=number],input[type=password],select{
+  width:100%;border:1px solid var(--line-2);border-radius:12px;background:var(--card);color:var(--ink);
+  padding:9px 12px;font-size:13.5px;outline:none;transition:box-shadow .5s var(--ease),border-color .5s var(--ease)}
+input:focus,select:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,113,227,.22)}
+input::placeholder{color:#aeaeb2}
+.row{display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap}
+.row>div{flex:1;min-width:130px}
+.row>div.narrow{flex:.5;min-width:100px}
+button{font-family:inherit;cursor:pointer;border:none;border-radius:999px;font-weight:600;transition:all .5s var(--ease)}
+button.primary{background:var(--blue);color:#fff;padding:11px 30px;font-size:14.5px;box-shadow:0 4px 14px rgba(0,113,227,.30)}
+button.primary:hover{background:var(--blue-h);transform:translateY(-1px)}
+button.primary:disabled{opacity:.5;cursor:not-allowed;transform:none}
+button.ghost{background:var(--card);color:var(--blue);border:1px solid var(--line-2);padding:10px 22px;font-size:13px}
+button.ghost:hover{background:var(--bg)}
+button.tiny{background:var(--blue-soft);color:var(--blue);padding:6px 16px;font-size:12.5px;min-width:66px}
+button.tiny:hover{background:rgba(0,113,227,.16)}
+button.link{background:none;color:var(--blue);padding:2px 0;font-size:12.5px;font-weight:500}
+button.link:hover{text-decoration:underline}
+button.danger{background:none;color:var(--red);font-size:12.5px;padding:6px 10px}
+/* ---------- switch ---------- */
+.switch{position:relative;display:inline-block;width:44px;height:26px;flex:none}
+.switch input{opacity:0;width:0;height:0;position:absolute}
+.switch .track{position:absolute;inset:0;background:#e9e9eb;border-radius:999px;transition:background .5s var(--ease);cursor:pointer}
+.switch .track::after{content:"";position:absolute;top:2px;left:2px;width:22px;height:22px;border-radius:50%;background:#fff;
+  box-shadow:0 2px 4px rgba(0,0,0,.18);transition:transform .5s var(--ease)}
+.switch input:checked + .track{background:var(--green)}
+.switch input:checked + .track::after{transform:translateX(18px)}
+/* ---------- items ---------- */
+.item{padding:14px 0;transition:background .5s var(--ease)}
+.item + .item{border-top:1px solid var(--line)}
+.item-row{display:flex;align-items:center;gap:16px}
+.item-row .grow{flex:1;min-width:0}
+.item-head{display:flex;align-items:center;gap:14px}
+.item-icon{width:36px;height:36px;flex:none;border-radius:10px;display:flex;align-items:center;justify-content:center;
+  background:var(--accent,#0071e3);color:#fff}
+.item-icon svg{display:block}
+.item-title{font-size:15px;font-weight:600;letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
+.item-desc{font-size:12.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item.open .item-desc{white-space:normal}
+.item.running{background:rgba(0,113,227,.045)}
+.item.running .item-icon{animation:breathe 1.6s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:1}50%{opacity:.55}}
+/* ---------- 文件上传按钮（Apple 风格） ---------- */
+.file-btn{display:inline-flex;align-items:center;gap:8px;cursor:pointer;
+  background:var(--card);color:var(--blue);border:1px solid var(--line-2);border-radius:999px;
+  padding:8px 18px;font-size:13px;font-weight:600;transition:all .5s var(--ease);overflow:hidden}
+.file-btn:hover{background:var(--bg)}
+.file-btn input[type="file"]{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.file-btn-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file-btn.has-file{background:var(--blue-soft);border-color:var(--blue)}
+
+/* ---------- pills ---------- */
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:2.5px 11px;font-size:11.5px;font-weight:600;white-space:nowrap}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.pill.passed{color:#1d7a3d;background:#e8f9ee}
+.pill.failed{color:#c21b17;background:#ffecec}
+.pill.warning{color:#9a6a00;background:#fff6e0}
+.pill.running{color:#0062c4;background:#e5f0ff}
+.pill.running::before{animation:pulse 1.1s ease-in-out infinite}
+.pill.pending,.pill.skipped,.pill.canceled{color:var(--muted-2);background:var(--bg)}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.72)}}
+/* ---------- config panels ---------- */
+.config-panel{display:none;margin:8px 0 2px;padding:14px 16px;background:#fafafa;border-radius:14px}
+.item.open .config-panel{display:block}
+.config-panel .row{margin-bottom:10px}
+.groups-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:10px}
+.groups-table th{background:var(--bg);color:var(--muted-2);font-weight:600;padding:7px 10px;text-align:left}
+.groups-table td{padding:6px 8px;border-top:1px solid var(--line)}
+.groups-table input{border-radius:9px;padding:6px 9px;font-size:12.5px}
+.ds-check{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px;margin:6px 0 12px}
+.ds-check .ds-item{display:flex;gap:8px;align-items:flex-start;border:1px solid var(--line-2);border-radius:12px;padding:8px 12px;cursor:pointer;transition:border-color .5s var(--ease)}
+.ds-check .ds-item:hover{border-color:var(--blue)}
+.ds-check input{margin-top:2px;accent-color:var(--blue);flex:none}
+.ds-name{font-size:12.5px;font-weight:600}
+.ds-id{font-size:11px;color:var(--muted);font-family:"SF Mono",ui-monospace,Consolas,monospace;margin-left:6px}
+.ds-desc{font-size:11.5px;color:var(--muted);margin-top:2px}
+.hint{font-size:12px;color:var(--muted);line-height:1.6;margin:4px 0 10px}
+/* ---------- log / verdict / report ---------- */
+.log-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.log{width:100%;height:70vh;overflow:auto;border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-family:"SF Mono",ui-monospace,"Cascadia Code",Consolas,monospace;font-size:11.5px;line-height:1.5;white-space:pre;transition:height .5s var(--ease),background .5s var(--ease),color .5s var(--ease);background:var(--log-bg,#0d1117);color:var(--log-fg,#e6edf3)}
+.log div{white-space:pre}
+.log.collapsed{height:36px;overflow:hidden}
+.gear{position:absolute;top:18px;right:22px;width:34px;height:34px;border-radius:50%;background:var(--bg);
+  color:var(--muted-2);font-size:16px;border:1px solid var(--line)}
+.gear:hover{color:var(--ink);transform:rotate(45deg)}
+.report-meta{font-size:11.5px;color:var(--muted);margin-top:8px;font-family:'SF Mono',ui-monospace,Consolas,monospace}
+.verdict{display:flex;flex-direction:column;gap:4px}
+.verdict .label{font-size:11px;color:var(--muted);letter-spacing:.12em;font-weight:600}
+.verdict .value{font-size:26px;font-weight:700;letter-spacing:-.02em}
+.verdict ul{margin:4px 0 0;padding-left:18px;color:var(--muted-2);font-size:12.5px;line-height:1.7}
+.report-frame{width:100%;height:760px;border:1px solid var(--line);border-radius:16px;background:#fff}
+.empty-report{border:1px solid var(--line);border-radius:16px;background:#fff;color:var(--muted);
+  padding:46px;text-align:center;font-size:13.5px}
+.probe-ok{color:#1d7a3d;font-size:12.5px}
+.probe-bad{color:#c21b17;font-size:12.5px}
+.actions{display:flex;gap:14px;margin-top:18px;flex-wrap:wrap;align-items:center}
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#1d1d1f;color:#fff;
+  padding:10px 20px;border-radius:999px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.25);
+  opacity:0;transition:opacity .5s var(--ease);pointer-events:none;z-index:50}
+.toast.show{opacity:1}
+footer{text-align:center;color:var(--muted);font-size:11.5px;padding:28px 0 8px}
+.grid2{display:grid;grid-template-columns:1.2fr .8fr;gap:18px}
+@media (max-width:900px){.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+  <div class="hero">
+    <div class="eyebrow">UCM Inference Acceleration · Acceptance</div>
+    <h1 id="app-title">UCM 推理加速验收工具</h1>
+    <p id="app-subtitle"></p>
+  </div>
+
+  <!-- 端点 -->
+  <div class="card" style="position:relative">
+    <button class="gear" onclick="toggleGear()" title="报告与配置">⚙</button>
+    <div id="gear-panel" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
+      <div class="row">
+        <div style="flex:2"><label class="field">报告标题</label><input type="text" id="adv-report-title"></div>
+        <div><label class="field">客户/公司名称</label><input type="text" id="adv-report-company"></div>
+        <div><label class="field">测试执行人</label><input type="text" id="adv-report-operator"></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div style="flex:2"><label class="field">配置保存路径</label><input type="text" id="save-path" value="./ucm-accept.user.yaml"></div>
+        <div style="flex:0"><button class="ghost" onclick="saveConfig()">保存到配置文件</button></div>
+      </div>
+      <div id="save-status" style="font-size:12px;color:var(--muted);margin-top:6px"></div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <div style="flex:1.4"><label class="field">服务地址</label>
+        <input type="text" id="base_url" placeholder="http://127.0.0.1:8000/v1"></div>
+      <div><label class="field">模型名称 <span style="color:#aeaeb2">（--served-model-name）</span></label>
+        <input type="text" id="model" placeholder="qwen3-0.6b"></div>
+      <div><label class="field">API Key（可选）</label>
+        <input type="password" id="api_key" placeholder=""></div>
+      <div style="flex:0"><button class="ghost" onclick="probe()">检测连通</button></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div style="flex:0;display:flex;align-items:center;gap:10px;min-width:210px;padding-bottom:6px">
+        <label class="switch"><input type="checkbox" id="tok_use_builtin" onchange="tokToggle()"><span class="track"></span></label>
+        <span style="font-size:12.5px;font-weight:500">使用内置模型</span>
+      </div>
+      <div id="tok-builtin-wrap" style="display:none"><label class="field">内置模型（离线资产包 tokenizers/）</label>
+        <select id="tok_builtin"></select></div>
+      <div id="tok-custom-wrap"><label class="field">自定义路径 / 模型 ID</label>
+        <input type="text" id="tok_custom" placeholder="/opt/ucm-assets/tokenizers/&lt;模型名&gt;"></div>
+    </div>
+    <div id="probe_result" style="margin-top:10px;font-size:12.5px;color:var(--muted)">尚未检测。点击“检测连通”验证地址、模型与上下文窗口。</div>
+  </div>
+
+  <div class="section-title">验收项目 <small>开关决定是否纳入验收，「配置」展开单项参数</small></div>
+  <div class="card" id="items" style="padding:6px 24px"></div>
+
+  <div class="actions">
+    <button class="primary" id="btn-run" onclick="runSelected()">执行勾选的验收测试</button>
+    <button class="ghost" id="btn-cancel" onclick="cancelRun()" style="display:none">停止当前任务</button>
+    <button class="ghost" onclick="window.open('/api/report/download')">导出 HTML</button>
+    <button class="ghost" onclick="exportPdf()">导出 PDF</button>
+    <button class="ghost" onclick="window.open('/api/report/json')">导出 JSON</button>
+    <button class="ghost" onclick="toggleCompare()">结果对比</button>
+  </div>
+
+  <div class="card" id="compare-panel" style="display:none;margin-top:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <strong style="font-size:14px">结果对比（1~5 个）</strong>
+      <span class="muted" style="font-size:12px;color:var(--muted)">标签用于报告着色；来源可选盘上已有结果或上传 report.json</span>
+    </div>
+    <div id="compare-rows"></div>
+    <div style="display:flex;gap:14px;margin-top:10px">
+      <button class="link" onclick="addCompareRow()">+ 添加结果</button>
+      <button class="primary" onclick="generateCompare()">生成对比报告</button>
+    </div>
+    <div id="compare-error" style="font-size:12.5px;color:#c21b17;margin-top:8px"></div>
+  </div>
+
+  <div class="card" style="margin-top:18px">
+    <div class="log-toolbar">
+      <label class="field" style="margin:0">执行日志</label>
+      <button class="link" id="log-toggle" onclick="toggleLog()">折叠</button>
+      <button class="link" onclick="copyLog()">复制</button>
+      <button class="link" onclick="window.open('/api/log/download')">下载全量日志</button>
+      <span style="flex:1"></span>
+      <label class="field" style="margin:0">配色</label>
+      <select id="log-theme" onchange="applyLogTheme(this.value)" style="width:auto;padding:5px 10px;font-size:12px">
+        <option value="github-dark">GitHub Dark</option>
+        <option value="one-dark">One Dark</option>
+        <option value="dracula">Dracula</option>
+        <option value="solarized">Solarized Dark</option>
+        <option value="paper">Paper（浅色）</option>
+      </select>
+      <button class="link" onclick="window.open('/api/report/bundle')">打包下载（报告 + EvalScope 产物）</button>
+      <span class="pill pending" id="log-count" style="display:none">0 行</span>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <div class="card verdict" style="margin-top:16px">
+    <div class="label" id="verdict-label">验收结论</div>
+    <div class="value" id="verdict-value" style="color:#6e6e73">尚未执行</div>
+    <ul id="verdict-reasons"></ul>
+    <div id="verdict-meta" style="font-size:11.5px;color:var(--muted);margin-top:6px"></div>
+    <div id="report-path" style="font-size:11.5px;color:var(--muted);margin-top:6px;font-family:'SF Mono',ui-monospace,Consolas,monospace"></div>
+  </div>
+
+  <div class="section-title">验收报告 <small>报告内嵌图表与原始命令，可离线归档</small></div>
+  <div id="report-wrap" class="card" style="padding:0;overflow:hidden">
+    <div class="empty-report" style="border:none;border-radius:0">执行测试后，这里会显示完整验收报告。</div>
+  </div>
+
+  <footer>UCM Inference Acceleration Acceptance · v<span id="ver"></span> · 测试由 EvalScope 原生执行</footer>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const ICONS = {
+  perf: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14l4-4"/><path d="M3.4 18.5a10 10 0 1 1 17.2 0"/></svg>',
+  multiturn: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+  sla: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="0.8" fill="currentColor" stroke="none"/></svg>',
+  accuracy: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M8 17v-4"/><path d="M13 17V8"/><path d="M18 17v-7"/></svg>',
+  agent: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="5" width="14" height="14" rx="2.5"/><rect x="10" y="10" width="4" height="4" rx="0.8"/><path d="M9 2.5V5M15 2.5V5M9 19v2.5M15 19v2.5M2.5 9H5M2.5 15H5M19 9h2.5M19 15h2.5"/></svg>'
+};
+const ITEMS = {
+  perf: {eta: '', name: '基础性能测试', eta: '约 5 分钟', accent: '#0071e3',
+         desc: '多组配置实测吞吐、TTFT、TPOT 与总延迟，并绘制并发趋势。'},
+  multiturn: {eta: '', name: '多轮对话测试', eta: '约 10 分钟', accent: '#af52de',
+         desc: '由 EvalScope 多轮压测执行真实对话 / Agent 轨迹场景，统计完成率、延迟与缓存命中。'},
+  sla: {eta: '', name: 'SLA 自动调优', eta: '约 8 分钟', accent: '#ff9500',
+         desc: 'EvalScope --sla-auto-tune 按 avg / P99 阈值自动搜索满足 SLA 的最大并发。'},
+  accuracy: {eta: '', name: '模型精度测试', eta: '约 20 分钟', accent: '#34c759',
+         desc: 'GPQA、GSM8K、LongBench-v2、BFCL-v3 各跑两轮，核验 KVCache 落盘一致性；BFCL 需服务启用工具调用。'},
+  agent: {eta: '', name: 'Agent 场景测试', eta: '', accent: '#30b0c7',
+         desc: 'EvalScope AgentX 长会话服务级压测；上下文不足时自动降级 smoke 并标注（不作验收结论）。'}
+};
+const ORDER = ['perf', 'multiturn', 'sla', 'accuracy', 'agent'];
+let STATE = null;
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 2600);
+}
+const val = id => document.getElementById(id).value;
+const num = id => parseFloat(val(id)) || 0;
+
+async function initState() {
+  const r = await fetch('/api/state'); STATE = await r.json();
+  document.getElementById('app-title').textContent = STATE.title;
+  document.getElementById('app-subtitle').textContent = STATE.subtitle;
+  document.getElementById('ver').textContent = STATE.version;
+  document.getElementById('base_url').value = STATE.endpoint.base_url || '';
+  document.getElementById('model').value = STATE.endpoint.model || '';
+  const tok = STATE.tokenizer;
+  document.getElementById('tok_use_builtin').checked = tok.has_builtin && tok.use_builtin;
+  document.getElementById('tok_builtin').innerHTML =
+    (tok.builtin_choices || []).map(n => `<option ${n === tok.builtin ? 'selected' : ''}>${n}</option>`).join('');
+  document.getElementById('tok_custom').value = tok.custom || '';
+  tokToggle();
+  renderItems();
+  await refreshStatus();   // 结论卡与报告同源初始化（不再显示静态“尚未执行”）
+  refreshReport();
+  setRunning(STATE.running);
+  // 恢复日志现场（进程重启后显示最近一次执行的日志）
+  try {
+    const r = await fetch('/api/log?offset=0');
+    const d = await r.json();
+    appendLogLines(d.lines || []);
+    logOffset = d.total;
+    updateLogBadge();
+  } catch (e) { /* 忽略 */ }
+  if (STATE.running) pollLog();
+}
+
+function tokToggle() {
+  const on = document.getElementById('tok_use_builtin').checked && STATE.tokenizer.has_builtin;
+  document.getElementById('tok-builtin-wrap').style.display = on ? '' : 'none';
+  document.getElementById('tok-custom-wrap').style.display = on ? 'none' : '';
+}
+
+function renderItems() {
+  const wrap = document.getElementById('items');
+  const sel = new Set(STATE.items_default || []);
+  const perfGroups = STATE.perf.groups || [];
+  const mt = STATE.multiturn, sla = STATE.sla, acc = STATE.accuracy, agent = STATE.agent;
+  wrap.innerHTML = ORDER.map(key => `
+  <div class="item" id="item-${key}" data-key="${key}">
+    <div class="item-row">
+      <div class="grow"><div class="item-head">
+        <div class="item-icon" style="--accent:${ITEMS[key].accent}">${ICONS[key]}</div>
+        <div><div class="item-title">${ITEMS[key].name}</div>
+        <div class="item-desc">${ITEMS[key].desc}</div></div>
+      </div></div>
+      <button class="link" onclick="toggleConfig('${key}')">配置</button>
+      <label class="switch"><input type="checkbox" class="item-enable" data-key="${key}" ${sel.has(key) ? 'checked' : ''}><span class="track"></span></label>
+    </div>
+    <div class="config-panel" id="panel-${key}">${panelHtml(key, perfGroups, mt, sla, acc, agent)}</div>
+  </div>`).join('');
+}
+
+function panelHtml(key, groups, mt, sla, acc, agent) {
+  if (key === 'perf') return `
+    <div class="hint">每组独立执行一次 EvalScope perf 并聚合；前缀长度 = 输入长度 × 命中率（取整）。</div>
+    <table class="groups-table"><thead><tr>
+      <th>并发</th><th>请求数</th><th>输入长度</th><th>输出长度</th><th>命中率 %</th><th>前缀种数</th><th></th>
+    </tr></thead><tbody id="perf-groups">${groups.map(g => perfGroupRow(g)).join('')}</tbody></table>
+    <button class="link" onclick="addGroup()">+ 添加一组</button>
+    <div class="row" style="margin-top:8px">
+      <div><label class="field">perf 数据集</label><input type="text" id="perf-dataset" value="${STATE.perf.dataset}"></div>
+      <div class="narrow"><label class="field">预热请求数</label><input type="number" id="perf-warmup" value="${STATE.perf.warmup}"></div>
+      <div class="narrow"><label class="field">请求超时（秒）</label><input type="number" id="perf-timeout" value="${STATE.perf.timeout_s}"></div>
+    </div>`;
+  if (key === 'multiturn') return `
+    <div class="hint">数据集为 EvalScope 内置多轮场景（首次执行从 ModelScope 拉取并缓存）。
+    「会话组数」= --number，即共发起多少条多轮会话（每条会话含多轮）；「并发会话数」= 同时进行的会话数。</div>
+    <div class="ds-check">${mt.scenarios.map(s => `
+      <label class="ds-item"><input type="checkbox" class="mt-scenario" data-key="${s.key}"
+        ${mt.selected.includes(s.key) ? 'checked' : ''}>
+        <span><span class="ds-name">${s.label}</span><span class="ds-id">${s.dataset}</span>
+        <div class="ds-desc">${s.description}</div></span></label>`).join('')}
+    </div>
+    <div class="row">
+      <div class="narrow"><label class="field">会话组数（--number）</label><input type="number" id="mt-conversations" value="${mt.conversations}"></div>
+      <div class="narrow"><label class="field">并发会话数</label><input type="number" id="mt-parallel" value="${mt.parallel}"></div>
+      <div class="narrow"><label class="field">最少轮次</label><input type="number" id="mt-min" value="${mt.min_turns}"></div>
+      <div class="narrow"><label class="field">最多轮次</label><input type="number" id="mt-max" value="${mt.max_turns}"></div>
+    </div>`;
+  if (key === 'sla') return `
+    <div class="hint">达标判定完全由 EvalScope --sla-auto-tune 完成（avg / P99 任意档位组合，全部满足才算达标）；留空的档位不参与判定。</div>
+    <div class="row">
+      <div class="narrow"><label class="field">输入长度</label><input type="number" id="sla-input" value="${sla.input}"></div>
+      <div class="narrow"><label class="field">输出长度</label><input type="number" id="sla-output" value="${sla.output}"></div>
+      <div class="narrow"><label class="field">命中率 %</label><input type="number" id="sla-ratio" value="${sla.prefix_ratio}"></div>
+      <div class="narrow"><label class="field">前缀种数</label><input type="number" id="sla-count" value="${sla.prefix_count}"></div>
+      <div class="narrow"><label class="field">搜索并发上限</label><input type="number" id="sla-upper" value="${sla.upper}"></div>
+      <div class="narrow"><label class="field">搜索下限</label><input type="number" id="sla-lower" value="${sla.lower}"></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div><label class="field">TTFT avg ≤（秒）</label><input type="number" id="sla-avg-ttft" value="${sla.thresholds.avg_ttft_s ?? ''}"></div>
+      <div><label class="field">TPOT avg ≤（毫秒）</label><input type="number" id="sla-avg-tpot" value="${sla.thresholds.avg_tpot_ms ?? ''}"></div>
+      <div><label class="field">TTFT P99 ≤（秒，可选）</label><input type="number" id="sla-p99-ttft" value="${sla.thresholds.p99_ttft_s ?? ''}"></div>
+      <div><label class="field">TPOT P99 ≤（毫秒，可选）</label><input type="number" id="sla-p99-tpot" value="${sla.thresholds.p99_tpot_ms ?? ''}"></div>
+    </div>`;
+  if (key === 'accuracy') return `
+    <div class="hint">先跑完一轮全部勾选数据集，再跑第二轮；两轮得分偏差用于核验一致性。</div>
+    <div class="ds-check">${acc.datasets.map(d => `
+      <label class="ds-item"><input type="checkbox" class="acc-dataset" data-key="${d.key}"
+        ${d.enabled ? 'checked' : ''}>
+        <span><span class="ds-name">${d.label}</span><span class="ds-id">${d.dataset}${d.limit ? ' · ' + d.limit + ' 条' : ''}</span>
+        <div class="ds-desc">${d.description}</div></span></label>`).join('')}
+    </div>
+    <div class="row">
+      <div class="narrow"><label class="field">轮数</label><input type="number" id="acc-runs" value="${acc.runs}"></div>
+      <div class="narrow"><label class="field">每项样本数（留空 = 全量）
+        <input type="number" id="acc-limit" placeholder="全量"></label></div>
+    </div>`;
+  return `
+    <div class="hint">EvalScope AgentX 服务级压测；上下文低于模型上限时自动降级 smoke 并在报告中标注。</div>
+    <div class="row">
+      <div><label class="field">目标上下文（tokens，决定 AgentX 变体：≥128K 用 256k，否则 full）</label><input type="number" id="agent-context" value="${agent.context}"></div>
+      <div class="narrow"><label class="field">持续时长（分钟，benchmark ≥15）</label><input type="number" id="agent-duration" value="${agent.duration}" min="15"></div>
+      <div><label class="field">Agent 数据集</label><input type="text" id="agent-dataset" value="${agent.dataset_name}"></div>
+    </div>`;
+}
+
+function perfGroupRow(g) {
+  return `<tr>
+    <td><input type="text" class="g-parallel" value="${g.parallel}"></td>
+    <td><input type="number" class="g-number" value="${g.number}"></td>
+    <td><input type="number" class="g-input" value="${g.input}"></td>
+    <td><input type="number" class="g-output" value="${g.output}"></td>
+    <td><input type="number" class="g-ratio" value="${g.prefix_ratio}"></td>
+    <td><input type="number" class="g-count" value="${g.prefix_count}"></td>
+    <td><button class="danger" onclick="this.closest('tr').remove()">删除</button></td>
+  </tr>`;
+}
+function addGroup() {
+  document.getElementById('perf-groups').insertAdjacentHTML('beforeend',
+    perfGroupRow({parallel: '8', number: 64, input: 65536, output: 512, prefix_ratio: 90, prefix_count: 32}));
+}
+function toggleConfig(key) {
+  const item = document.getElementById('item-' + key);
+  const open = item.classList.toggle('open');
+  item.querySelector('[onclick^="toggleConfig"]').textContent = open ? '收起配置' : '配置';
+}
+
+function toggleCompare() {
+  const p = document.getElementById('compare-panel');
+  const show = p.style.display === 'none';
+  p.style.display = show ? '' : 'none';
+  if (show && !document.querySelector('#compare-rows .cmp-row')) addCompareRow();
+}
+
+function bindSelectChange(select) {
+  const row = select.closest('.cmp-row');
+  const input = row.querySelector('.cmp-file');
+  const text = row.querySelector('.file-btn-text');
+  const btn = row.querySelector('.file-btn');
+  if (select.value) {
+    input.value = '';
+    text.textContent = '上传 report.json';
+    btn.classList.remove('has-file');
+    btn.style.opacity = '0.45';
+    btn.style.pointerEvents = 'none';
+  } else {
+    btn.style.opacity = '';
+    btn.style.pointerEvents = '';
+  }
+}
+
+function bindFileButton(row) {
+  const input = row.querySelector('.cmp-file');
+  const text = row.querySelector('.file-btn-text');
+  const btn = row.querySelector('.file-btn');
+  const select = row.querySelector('.cmp-source');
+  // 下拉与上传二选一：选文件清空并禁用下拉；选下拉清空并禁用上传
+  input.addEventListener('change', () => {
+    const file = input.files && input.files[0];
+    text.textContent = file ? file.name : '上传 report.json';
+    btn.classList.toggle('has-file', !!file);
+    select.value = '';  // 二选一：选文件即清空下拉
+  });
+  select.addEventListener('change', () => {
+    if (select.value) {
+      input.value = '';  // 二选一：选下拉即清空上传文件
+      text.textContent = '上传 report.json';
+      btn.classList.remove('has-file');
+    }
+  });
+}
+
+function addCompareRow() {
+  const rows = document.querySelectorAll('#compare-rows .cmp-row').length;
+  if (rows >= 5) { toast('最多支持 5 个结果'); return; }
+  fetch('/api/runs').then(r => r.json()).then(runs => {
+    const options = runs.map(r =>
+      `<option value="${r.run_id}">${r.run_id} · ${r.conclusion}</option>`).join('');
+    const wrap = document.getElementById('compare-rows');
+    const color = ['#0071e3', '#34c759', '#af52de', '#ff9500', '#ff3b30'][rows];
+    wrap.insertAdjacentHTML('beforeend', `
+      <div class="cmp-row" style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
+        <span class="dot" style="background:${color};width:10px;height:10px;border-radius:50%;flex:none"></span>
+        <input type="text" class="cmp-label" placeholder="标签（如 UCM / 原生）" style="width:170px">
+        <select class="cmp-source" onchange="bindSelectChange(this)">
+          <option value="">— 选择已有结果 —</option>${options}
+        </select>
+        <label class="file-btn" style="flex:1">
+          <input type="file" class="cmp-file" accept=".json,.yml">
+          <span class="file-btn-text">上传 report.json</span>
+        </label>
+        <button class="danger" onclick="this.closest('.cmp-row').remove()">删除</button>
+      </div>`);
+    bindFileButton(wrap.lastElementChild);
+  });
+}
+
+async function generateCompare() {
+  const errEl = document.getElementById('compare-error');
+  errEl.textContent = '';
+  const entries = [];
+  for (const row of document.querySelectorAll('#compare-rows .cmp-row')) {
+    const label = row.querySelector('.cmp-label').value.trim();
+    const runId = row.querySelector('.cmp-source').value;
+    const fileInput = row.querySelector('.cmp-file');
+    const file = fileInput.files && fileInput.files[0];
+    if (!runId && !file) continue;
+    const entry = {label: label || (runId || file.name).replace('.json', ''), run_id: runId || ''};
+    if (file) {
+      try { entry.report_json = JSON.parse(await file.text()); }
+      catch (e) { errEl.textContent = `${entry.label}：上传文件不是有效的 report.json`; return; }
+    }
+    entries.push(entry);
+  }
+  if (!entries.length) { errEl.textContent = '请至少选择一个结果'; return; }
+  toast('正在生成对比报告…');
+  try {
+    const r = await fetch('/api/compare', {method: 'POST',
+      headers: {'Content-Type': 'application/json'}, body: JSON.stringify({entries})});
+    if (!r.ok) { const d = await r.json().catch(() => ({})); errEl.textContent = d.detail || '生成失败'; return; }
+    const html = await r.text();
+    const blob = new Blob([html], {type: 'text/html'});
+    window.open(URL.createObjectURL(blob), '_blank');
+  } catch (e) { errEl.textContent = '生成失败：' + e; }
+}
+
+function toggleGear() {
+  const p = document.getElementById('gear-panel');
+  p.style.display = p.style.display === 'none' ? '' : 'none';
+}
+function toggleLog() {
+  const el = document.getElementById('log');
+  const collapsed = el.classList.toggle('collapsed');
+  document.getElementById('log-toggle').textContent = collapsed ? '展开' : '折叠';
+}
+
+const LOG_THEMES = {
+  'github-dark': {bg: '#0d1117', fg: '#e6edf3', border: '#30363d'},
+  'one-dark':    {bg: '#282c34', fg: '#abb2bf', border: '#3e4451'},
+  'dracula':     {bg: '#282a36', fg: '#f8f8f2', border: '#44475a'},
+  'solarized':   {bg: '#002b36', fg: '#93a1a1', border: '#0a4b5c'},
+  'paper':       {bg: '#ffffff', fg: '#1d1d1f', border: '#e8e8ed'},
+};
+
+function applyLogTheme(name) {
+  const theme = LOG_THEMES[name] || LOG_THEMES['github-dark'];
+  const sel = document.getElementById('log-theme');
+  if (sel && sel.value !== name) sel.value = name;
+  const log = document.getElementById('log');
+  log.style.background = theme.bg;
+  log.style.color = theme.fg;
+  log.style.borderColor = theme.border;
+  localStorage.setItem('ucm-log-theme', name);
+}
+
+(function initLogTheme() {
+  const saved = localStorage.getItem('ucm-log-theme') || 'github-dark';
+  const sel = document.getElementById('log-theme');
+  if (sel) { sel.value = saved; sel.addEventListener('change', () => applyLogTheme(sel.value)); }
+  document.addEventListener('DOMContentLoaded', () => applyLogTheme(
+    localStorage.getItem('ucm-log-theme') || 'github-dark'));
+})();
+async function exportPdf() {
+  toast('正在生成 PDF（约数秒）…');
+  try {
+    const r = await fetch('/api/report/export/pdf');
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      toast(d.detail || 'PDF 导出失败');
+      return;
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ucm-accept-report-${(STATE.report && STATE.report.run_id) || 'latest'}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast('PDF 已生成并开始下载');
+  } catch (e) { toast('PDF 导出失败'); }
+}
+
+function collectPayload(items) {
+  const groups = [...document.querySelectorAll('#perf-groups tr')].map(tr => ({
+    parallel: tr.querySelector('.g-parallel').value.trim(),
+    number: parseInt(tr.querySelector('.g-number').value) || 64,
+    input: parseInt(tr.querySelector('.g-input').value) || 65536,
+    output: parseInt(tr.querySelector('.g-output').value) || 512,
+    prefix_ratio: parseFloat(tr.querySelector('.g-ratio').value) || 0,
+    prefix_count: parseInt(tr.querySelector('.g-count').value) || 32,
+  }));
+  return {
+    endpoint: {base_url: val('base_url'), model: val('model'), api_key: val('api_key')},
+    tokenizer: {use_builtin: document.getElementById('tok_use_builtin').checked,
+                builtin: val('tok_builtin'), custom: val('tok_custom')},
+    items,
+    perf: {groups,
+           dataset: val('perf-dataset'), warmup: num('perf-warmup'),
+           timeout_s: num('perf-timeout')},
+    multiturn: {scenarios: [...document.querySelectorAll('.mt-scenario:checked')].map(el => el.dataset.key),
+                conversations: num('mt-conversations') || 12, parallel: num('mt-parallel') || 4,
+                min_turns: num('mt-min') || 2, max_turns: num('mt-max') || 5},
+    sla: {input: num('sla-input'), output: num('sla-output'),
+          prefix_ratio: num('sla-ratio'), prefix_count: num('sla-count'), upper: num('sla-upper'),
+          lower: num('sla-lower'),
+          avg_ttft_s: num('sla-avg-ttft'), avg_tpot_ms: num('sla-avg-tpot'),
+          p99_ttft_s: num('sla-p99-ttft'), p99_tpot_ms: num('sla-p99-tpot')},
+    accuracy: {datasets: [...document.querySelectorAll('.acc-dataset:checked')].map(el => el.dataset.key),
+               runs: num('acc-runs') || 2, limit: num('acc-limit')},
+    agent: {context: num('agent-context'), duration: num('agent-duration'),
+            dataset_name: val('agent-dataset')},
+    report: {title: val('adv-report-title'), company: val('adv-report-company'),
+             operator: val('adv-report-operator')},
+  };
+}
+
+function checkedItems() {
+  return ORDER.filter(k => document.querySelector(`.item-enable[data-key="${k}"]`).checked);
+}
+
+async function probe() {
+  const el = document.getElementById('probe_result');
+  el.innerHTML = '检测中…';
+  const r = await fetch('/api/probe', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({base_url: val('base_url'), model: val('model'), api_key: val('api_key')})});
+  const d = await r.json();
+  if (!r.ok) { el.innerHTML = `<span class="probe-bad">✗ ${d.detail || '检测失败'}</span>`; return; }
+  const lat = d.latency_ms != null ? ` · ${Math.round(d.latency_ms)} ms` : '';
+  const ctx = d.context_window ? ` · 上下文 ${d.context_window}` : '';
+  el.innerHTML = d.connected
+    ? `<span class="probe-ok">● ${d.message}${lat}${ctx}</span><div class="hint">${d.detail || ''}</div>`
+    : `<span class="probe-bad">○ ${d.message}</span><div class="hint">${d.detail || ''}</div>`;
+}
+
+let pollTimer = null;
+let logOffset = 0;  // 已接收的日志行数（增量拉取）
+
+let logTruncated = 0;  // DOM 截断掉的行数（完整内容始终在 /api/log）
+
+function appendLogLines(newLines) {
+  if (!newLines.length) return;
+  const log = document.getElementById('log');
+  const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 60;
+  const frag = document.createDocumentFragment();
+  for (const line of newLines) {
+    const div = document.createElement('div');
+    div.textContent = line;
+    frag.appendChild(div);
+  }
+  log.appendChild(frag);
+  // DOM 上限 1000 行（完整日志始终可通过复制 / 下载全量日志获取）
+  while (log.childElementCount > 1000) log.removeChild(log.firstElementChild);
+  if (nearBottom) log.scrollTop = log.scrollHeight;
+  updateLogBadge();
+}
+
+function updateLogBadge() {
+  const badge = document.getElementById('log-count');
+  badge.style.display = '';
+  badge.textContent = `${logOffset} 行（页面保留最近 1000 行）`;
+}
+
+async function copyLog() {
+  try {
+    const r = await fetch('/api/log?offset=0');
+    const d = await r.json();
+    await navigator.clipboard.writeText((d.lines || []).join('\n'));
+    toast(`已复制全量日志（${(d.lines || []).length} 行）`);
+  } catch (e) { toast('复制失败，可点「下载全量日志」'); }
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+function pollLog() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  pollTimer = setInterval(async () => {
+    try {
+      const r = await fetch('/api/log?offset=' + logOffset);
+      if (r.ok) {
+        const d = await r.json();
+        // total < offset 说明开始了新一轮执行：清屏重计
+        if (d.total < logOffset) { logOffset = 0; document.getElementById('log').textContent = ''; }
+        appendLogLines(d.lines);
+        logOffset = d.total;
+        await refreshStatus();
+        if (!d.running) {
+          stopPolling();
+          await refreshReport();
+          setRunning(false);
+        }
+      }
+    } catch (e) { /* 忽略轮询失败 */ }
+  }, 1000);
+}
+
+function resetRunView() {
+  document.getElementById('log').textContent = '';
+  logOffset = 0;
+  logTruncated = 0;
+  stopPolling();
+  lastReportRun = null;
+  document.getElementById('report-wrap').innerHTML =
+    '<div class="empty-report" style="border:none;border-radius:0">正在执行，结束后这里会显示完整验收报告。</div>';
+  document.getElementById('verdict-value').textContent = '执行中…';
+  document.getElementById('verdict-value').style.color = '#0062c4';
+  document.getElementById('verdict-reasons').innerHTML = '';
+  document.getElementById('verdict-meta').textContent = '';
+  document.getElementById('report-path').textContent = '';
+}
+
+async function startRun(items) {
+  const payload = collectPayload(items);
+  const r = await fetch('/api/run', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({payload})});
+  const d = await r.json();
+  if (!r.ok) { toast(d.detail || '启动失败'); return; }
+  resetRunView();
+  setRunning(true);
+  pollLog();
+}
+function runSelected() { startRun(checkedItems()); }
+
+async function cancelRun() {
+  await fetch('/api/cancel', {method: 'POST'});
+  toast('已请求停止当前任务…');
+}
+
+function setRunning(running) {
+  document.getElementById('btn-run').disabled = running;
+  document.getElementById('btn-cancel').style.display = running ? '' : 'none';
+  if (running) ORDER.forEach(k => {
+    const el = document.getElementById('item-' + k);
+    if (el) el.classList.add('running');
+  });
+  else ORDER.forEach(k => {
+    const el = document.getElementById('item-' + k);
+    if (el) el.classList.remove('running');
+  });
+}
+
+async function refreshStatus() {
+  const r = await fetch('/api/state'); STATE = await r.json();
+  const rep = STATE.report || {};
+  if (STATE.running) {
+    // 执行中：结论区保持“执行中…”，避免上一次报告的结论提前覆盖
+    document.getElementById('verdict-label').textContent = '验收结论';
+    document.getElementById('verdict-value').textContent = '执行中…';
+    document.getElementById('verdict-value').style.color = '#0062c4';
+    document.getElementById('verdict-reasons').innerHTML = '<li>正在执行，完成后自动更新结论与报告。</li>';
+    document.getElementById('verdict-meta').textContent = '';
+    return;
+  }
+  if (rep.conclusion) {
+    document.getElementById('verdict-label').textContent =
+      `验收结论 · ${rep.mode === 'live' ? '实机' : '模拟（不作为验收依据）'}`;
+    document.getElementById('verdict-value').textContent = rep.conclusion;
+    document.getElementById('verdict-value').style.color =
+      rep.conclusion === '通过' ? '#1d7a3d' : rep.conclusion === '有条件通过' ? '#9a6a00'
+      : rep.conclusion === '不通过' ? '#c21b17' : '#6e6e73';
+    document.getElementById('verdict-reasons').innerHTML =
+      (rep.reasons || []).map(x => `<li>${x}</li>`).join('') || '<li>暂无</li>';
+    document.getElementById('verdict-meta').textContent =
+      `任务 ${rep.run_id || ''} · 开始 ${rep.started_at || ''}`;
+    // 结论对应的报告变化时同步刷新 iframe（结论与报告永远同源）
+    if (rep.run_id !== lastReportRun) refreshReport();
+  }
+  setRunning(STATE.running);
+}
+
+let lastReportRun = null;
+function refreshReport(manual) {
+  const rep = (STATE && STATE.report) || {};
+  const wrap = document.getElementById('report-wrap');
+  const hasFrame = !!document.getElementById('report-frame');
+  const url = rep.run_id ? `/api/report?run_id=${encodeURIComponent(rep.run_id)}` : '/api/report';
+  fetch(url).then(r => { if (!r.ok) throw 0; return r.text(); }).then(html => {
+    if (!hasFrame) {
+      wrap.innerHTML = '<iframe class="report-frame" id="report-frame" title="验收报告"></iframe>';
+    }
+    const frame = document.getElementById('report-frame');
+    // 仅在报告对应任务变化时重载，避免状态轮询期间反复闪烁
+    const runChanged = rep.run_id && rep.run_id !== lastReportRun;
+    if (!frame.srcdoc || runChanged || manual === true) {
+      frame.srcdoc = html;
+      lastReportRun = rep.run_id || null;
+    }
+    const meta = document.getElementById('report-path');
+    if (meta && rep.output_dir) meta.textContent = '报告目录：' + rep.output_dir;
+  }).catch(() => {
+    if (manual) toast('尚未生成报告');
+    if (!hasFrame && !wrap.querySelector('.empty-report'))
+      wrap.innerHTML = '<div class="empty-report" style="border:none;border-radius:0">执行测试后，这里会显示完整验收报告。</div>';
+  });
+}
+
+async function saveConfig() {
+  const r = await fetch('/api/config/save', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({path: val('save-path')})});
+  const d = await r.json();
+  document.getElementById('save-status').textContent =
+    r.ok ? `✅ 已保存：${d.saved}（下次启动可用 --config 复用）` : `❌ ${d.detail || '保存失败'}`;
+}
+
+initState().then(refreshReport);
+</script>
+</body>
+</html>

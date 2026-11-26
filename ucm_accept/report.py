@@ -23,65 +23,66 @@ from .models import (
 
 CSS = r"""
 :root{
-  --ink:#0f172a; --muted:#5b6779; --line:#dde3ec; --bg:#eef2f7; --card:#ffffff;
-  --brand:#0b2a4a; --brand2:#124f7a; --accent:#0f9d8a; --accent-soft:#e6f7f4;
-  --amber:#b45309; --amber-soft:#fff7e6; --red:#b91c1c; --red-soft:#fef2f2;
-  --green:#15803d; --green-soft:#eaf7ee;
+  --ink:#1d1d1f; --muted:#86868b; --line:#e8e8ed; --bg:#f5f5f7; --card:#ffffff;
+  --brand:#1d1d1f; --brand2:#0071e3; --accent:#0071e3; --accent-soft:#e5f0ff;
+  --amber:#9a6a00; --amber-soft:#fff6e0; --red:#c21b17; --red-soft:#ffecec;
+  --green:#1d7a3d; --green-soft:#e8f9ee;
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--ink);
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","Noto Sans CJK SC",
-  "PingFang SC","Hiragino Sans GB",sans-serif;font-size:14px;line-height:1.65}
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI","Microsoft YaHei",
+  "Noto Sans CJK SC","PingFang SC","Hiragino Sans GB",sans-serif;font-size:14px;line-height:1.65;
+  -webkit-font-smoothing:antialiased}
 a{color:var(--brand2)}
 code,pre{font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace}
-.hero{background:linear-gradient(125deg,#081a30 0%,#0d3255 55%,#0f5a68 100%);color:#fff;
-  padding:34px 40px 30px;position:relative;overflow:hidden}
-.hero:after{content:"";position:absolute;right:-120px;top:-120px;width:380px;height:380px;
-  border-radius:50%;background:radial-gradient(circle,rgba(45,212,191,.28),transparent 68%)}
+/* 长命令自动换行：避免单行命令把报告撑出横向滚动条 */
+pre.code{white-space:pre-wrap;word-break:break-all;overflow-wrap:anywhere}
+.hero{background:var(--card);color:var(--ink);
+  padding:36px 40px 32px;position:relative;overflow:hidden;border-bottom:1px solid var(--line)}
 .hero .wrap{max-width:1180px;margin:0 auto;position:relative;z-index:1}
-.eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#8fd8cf;font-weight:700}
-.hero h1{margin:8px 0 10px;font-size:30px;line-height:1.25;font-weight:750;letter-spacing:.01em}
-.hero .sub{color:#cfe1f2;max-width:820px;margin:0;font-size:14px}
-.hero-meta{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:18px;color:#b9cee2;font-size:12.5px}
-.hero-meta b{color:#fff;font-weight:600}
-.mode-pill{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.25);
-  background:rgba(255,255,255,.1);border-radius:999px;padding:3px 11px;font-size:12px;color:#e6f6f3}
+.eyebrow{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.hero h1{margin:10px 0 10px;font-size:32px;line-height:1.15;font-weight:700;letter-spacing:-.02em}
+.hero .sub{color:var(--muted);max-width:820px;margin:0;font-size:14px}
+.hero-meta{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:18px;color:var(--muted);font-size:12.5px}
+.hero-meta b{color:var(--ink);font-weight:600}
+.mode-pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);
+  background:var(--accent-soft);border-radius:999px;padding:3px 11px;font-size:12px;color:#0062c4}
 main{max-width:1180px;margin:0 auto;padding:24px 28px 56px}
 .banner{border-radius:12px;padding:14px 18px;margin:18px 0;border:1px solid;font-size:13.5px}
 .banner.warn{background:var(--amber-soft);border-color:#f3d19b;color:#7c4a03}
 .banner.info{background:#eff6ff;border-color:#bfdbfe;color:#1e3a8a}
 .banner strong{font-weight:700}
 .verdict{display:grid;grid-template-columns:176px 1fr;gap:24px;align-items:center;
-  background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px 28px;
-  margin-top:0;position:relative;box-shadow:0 12px 32px rgba(15,23,42,.08)}
-.verdict-badge{border-radius:12px;padding:18px 12px;text-align:center;color:#fff;
-  background:var(--accent);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}
+  background:var(--card);border:none;border-radius:24px;padding:24px 28px;
+  margin-top:0;position:relative;box-shadow:0 4px 12px rgba(0,0,0,.04)}
+.verdict-badge{border-radius:16px;padding:18px 12px;text-align:center;color:#fff;
+  background:var(--accent);box-shadow:0 4px 14px rgba(0,113,227,.30)}
 .verdict-badge .label{font-size:11px;letter-spacing:.16em;opacity:.85}
 .verdict-badge .value{font-size:27px;font-weight:800;line-height:1.25;margin-top:3px}
 .verdict h2{font-size:17px;margin:0 0 6px}
 .verdict ul{margin:4px 0 0;padding-left:20px;color:var(--muted)}
 .verdict li{margin:2px 0}
-.section{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 24px;
-  margin-top:20px;box-shadow:0 2px 8px rgba(15,23,42,.03);page-break-inside:avoid}
+.section{background:var(--card);border:none;border-radius:24px;padding:24px 28px;
+  margin-top:20px;box-shadow:0 4px 12px rgba(0,0,0,.04);page-break-inside:avoid}
 .section>h2{font-size:19px;margin:0 0 4px;display:flex;align-items:center;gap:9px}
-.section>h2 .num{font-size:12px;color:#fff;background:var(--brand2);border-radius:6px;
+.section>h2 .num{font-size:12px;color:#fff;background:var(--blue,#0071e3);border-radius:999px;
   min-width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-weight:700}
 .section .lead{color:var(--muted);margin:0 0 16px;font-size:13px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
-.kv{border:1px solid var(--line);border-radius:11px;padding:12px 14px;background:#fbfcfe}
+.kv{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--bg)}
 .kv .k{color:var(--muted);font-size:11.5px;letter-spacing:.03em}
 .kv .v{font-weight:650;font-size:15px;margin-top:2px;overflow-wrap:anywhere}
 .kv.endpoint{grid-column:span 2}
 .kv.endpoint .v{font-size:13px}
-.metric{background:linear-gradient(180deg,#fbfdff,#f5f9ff);border:1px solid #dbe7f7;
+.metric{background:var(--bg);border:1px solid var(--line);
   border-radius:12px;padding:14px 16px}
 .metric .k{font-size:12px;color:var(--muted)}
 .metric .v{font-size:24px;font-weight:750;color:var(--brand2);margin-top:2px;line-height:1.2}
 .metric .s{font-size:11.5px;color:var(--muted);margin-top:3px}
 table{width:100%;border-collapse:collapse;margin:10px 0 2px;font-size:12.8px}
 th,td{border-bottom:1px solid var(--line);padding:8px 9px;text-align:left;vertical-align:top}
-th{background:#f6f8fc;color:#3b4b61;font-weight:650;white-space:nowrap}
+th{background:var(--bg);color:#6e6e73;font-weight:600;white-space:nowrap}
 tbody tr:last-child td{border-bottom:none}
 td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .table-wrap{overflow-x:auto}
@@ -101,7 +102,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:now
   border-radius:0 9px 9px 0;margin:12px 0;color:#6b4103;font-size:13px}
 .callout.bad{border-color:var(--red);background:var(--red-soft);color:#7f1d1d}
 .callout.good{border-color:var(--green);background:var(--green-soft);color:#14532d}
-.callout.info{border-color:#2563eb;background:#eff6ff;color:#1e3a8a}
+.callout.info{border-color:#0071e3;background:#e5f0ff;color:#0062c4}
 .details{border:1px solid var(--line);border-radius:10px;margin:10px 0;background:#fcfdff}
 .details summary{cursor:pointer;padding:10px 14px;font-weight:600;color:#334155}
 .details .body{padding:2px 14px 14px;border-top:1px solid var(--line)}
@@ -298,7 +299,7 @@ def svg_accuracy_bars(
         return '<div class="empty">暂无精度数据</div>'
     left, right, top, bottom = 58, 22, 18, 46
     plot_w, plot_h = width - left - right, height - top - bottom
-    colors = ["#2563eb", "#0f9d8a"]
+    colors = ["#0071e3", "#ff9500"]
     groups = len(labels)
     group_w = plot_w / max(1, groups)
     bar_w = min(30, group_w * 0.26)
@@ -449,9 +450,10 @@ def _perf_section(report: AcceptanceReport, item: ItemResult | None) -> str:
     body = _empty_item(item)
     if item and item.detail and item.detail.get("points"):
         points = item.detail["points"]
-        threshold = (report.config_snapshot.get("sla", {}).get("target", {}) or {})
-        ttft_target = threshold.get("ttft_p90_ms")
-        tpot_target = threshold.get("tpot_p90_ms")
+        _sla_cfg = (report.config_snapshot.get("sla", {}) or {})
+        _thr = (_sla_cfg.get("thresholds") or {})
+        ttft_target = _thr.get("avg_ttft_s")  # 秒
+        tpot_target = _thr.get("avg_tpot_ms")  # 毫秒
         rows = []
         for point in points:
             rows.append(
@@ -471,10 +473,10 @@ def _perf_section(report: AcceptanceReport, item: ItemResult | None) -> str:
             )
         charts = (
             '<div class="charts-2">'
-            f'<div class="chart"><h3>TTFT.P90（秒）</h3><p>首字延迟随并发变化，虚线为 SLA 目标</p>'
-            f'{svg_line_chart(points, lambda p: (p.get("ttft_p90_ms") or 0) / 1000, title="TTFT.P90", unit="秒", threshold=(ttft_target / 1000 if ttft_target else None), threshold_label=f"目标 {ttft_target/1000:.1f}s" if ttft_target else "", color="#2563eb")}</div>'
-            f'<div class="chart"><h3>TPOT.P90（毫秒）</h3><p>逐字延迟随并发变化，虚线为 SLA 目标</p>'
-            f'{svg_line_chart(points, lambda p: p.get("tpot_p90_ms"), title="TPOT.P90", unit="毫秒", threshold=tpot_target, threshold_label=f"目标 {tpot_target:.0f}ms" if tpot_target else "", color="#0f9d8a")}</div>'
+            f'<div class="chart"><h3>TTFT.P90（秒）</h3><p>首字延迟 P90 随并发变化；虚线为 SLA 的 TTFT avg 目标（如配置）</p>'
+            f'{svg_line_chart(points, lambda p: (p.get("ttft_p90_ms") or 0) / 1000, title="TTFT.P90", unit="秒", threshold=(ttft_target / 1000 if ttft_target else None), threshold_label=f"目标 {ttft_target/1000:.1f}s" if ttft_target else "", color="#0071e3")}</div>'
+            f'<div class="chart"><h3>TPOT.P90（毫秒）</h3><p>逐字延迟 P90 随并发变化；虚线为 SLA 的 TPOT avg 目标（如配置）</p>'
+            f'{svg_line_chart(points, lambda p: p.get("tpot_p90_ms"), title="TPOT.P90", unit="毫秒", threshold=tpot_target, threshold_label=f"目标 {tpot_target:.0f}ms" if tpot_target else "", color="#ff9500")}</div>'
             "</div>"
             f'<div class="chart"><h3>输出吞吐（tok/s）</h3><p>不同并发下的稳态输出吞吐</p>'
             f'{svg_line_chart(points, lambda p: p.get("throughput_tok_s"), title="输出吞吐", unit="tok/s", color="#7c3aed")}</div>'
@@ -500,7 +502,7 @@ def _perf_section(report: AcceptanceReport, item: ItemResult | None) -> str:
     return f"""
 <section class="section" id="perf">
   <h2><span class="num">02</span>基础性能 <span class="small muted" style="font-weight:400">EvalScope perf</span></h2>
-  <p class="lead">{_fmt_int(item.detail.get('context_length') if item and item.detail else 65536)} 上下文、固定请求数下的吞吐与首字/逐字延迟；表格中 TTFT/TPOT 单位为毫秒。</p>
+  <p class="lead">多组配置逐组执行 EvalScope perf 并聚合；表格中 TTFT/TPOT 单位为毫秒。</p>
   {body}
 </section>
 """
@@ -535,21 +537,34 @@ def _multiturn_section(report: AcceptanceReport, item: ItemResult | None) -> str
 """
 
 
+def _sla_target_text(target: dict) -> str:
+    """SLA 目标摘要（avg / P99 任意档位组合）。"""
+    labels = {
+        "avg_ttft_s": ("TTFT avg", 1000.0, "s"),
+        "avg_tpot_ms": ("TPOT avg", 1.0, "ms"),
+        "p99_ttft_s": ("TTFT P99", 1000.0, "s"),
+        "p99_tpot_ms": ("TPOT P99", 1.0, "ms"),
+    }
+    thresholds = target.get("thresholds") or {}
+    parts = [
+        f"{label} ≤ {_fmt(thresholds.get(key), 2)}{unit}"
+        for key, (label, scale, unit) in labels.items()
+        if thresholds.get(key)
+    ]
+    return "；".join(parts) or "未配置"
+
+
 def _sla_section(report: AcceptanceReport, item: ItemResult | None) -> str:
     body = _empty_item(item)
-    strategy_hint = "EvalScope 原生 · P90"
-    mode_note = "默认调用 EvalScope 原生 <code>--sla-auto-tune</code>，按 p90_ttft / p90_tpot 搜索满足阈值（TTFT.P90 &lt; 10s、TPOT.P90 &lt; 50ms）的最高并发；不自行实现搜索算法。"
+    strategy_hint = "EvalScope 原生 · avg / P99"
+    mode_note = (
+        "调用 EvalScope 原生 <code>--sla-auto-tune</code>，按 avg / P99 阈值搜索满足 SLA 的最高并发。"
+    )
     if item and item.detail:
         detail = item.detail
-        if detail.get("strategy") == "verify":
-            strategy_hint = "目标并发单点复核 · P90"
-            mode_note = (
-                "当前为 verify 模式：只调用 EvalScope perf 在目标并发下实测 P90，"
-                "不做并发搜索；适合快速复核。"
-            )
         target = detail.get("target") or {}
         probes = detail.get("probes") or []
-        strategy = detail.get("strategy", "verify")
+        strategy = detail.get("strategy", "native")
         target_point = next((p for p in probes if p.get("concurrency") == target.get("concurrency")), None)
         if target_point is None and strategy == "auto_tune" and detail.get("recommended_concurrency") == target.get("concurrency"):
             target_point = detail.get("best")
@@ -559,71 +574,80 @@ def _sla_section(report: AcceptanceReport, item: ItemResult | None) -> str:
             status, cls, color = "有条件", "info", "#b45309"
         else:
             status, cls, color = "不达标", "bad", "#b91c1c"
-        def verdict(value: float | None, limit: float | None, lower_is_better: bool = True) -> str:
+        # SLA 阈值 → (实测字段, 换算到显示单位, 单位名)；与 models.PerfPoint 一致
+        _metrics = [
+            ("avg_ttft_s", "TTFT avg", "ttft_avg_ms", 1000.0, "s"),
+            ("avg_tpot_ms", "TPOT avg", "tpot_avg_ms", 1.0, "ms"),
+            ("p99_ttft_s", "TTFT P99", "ttft_p99_ms", 1000.0, "s"),
+            ("p99_tpot_ms", "TPOT P99", "tpot_p99_ms", 1.0, "ms"),
+        ]
+        thresholds = target.get("thresholds") or {}
+        active = [(key, label, field, scale, unit) for key, label, field, scale, unit in _metrics
+                  if thresholds.get(key)]
+
+        def verdict(value: float | None, limit: float | None) -> str:
             if value is None or limit is None:
                 return '<span class="pill pending">—</span>'
-            ok = value < limit if lower_is_better else value >= limit
-            return '<span class="pill passed">通过</span>' if ok else '<span class="pill failed">未通过</span>'
-        actual_ttft = target_point.get("ttft_p90_ms") if target_point else None
-        actual_tpot = target_point.get("tpot_p90_ms") if target_point else None
-        compare_rows = f"""
-        <tr><td>TTFT.P90</td><td class="num">&lt; {_fmt((target.get('ttft_p90_ms') or 0)/1000, 2)} s</td>
-        <td class="num">{_fmt(actual_ttft / 1000, 2) if actual_ttft is not None else '—'} s</td>
-        <td>{verdict(actual_ttft, target.get('ttft_p90_ms'))}</td></tr>
-        <tr><td>TPOT.P90</td><td class="num">&lt; {_fmt(target.get('tpot_p90_ms'), 1)} ms</td>
-        <td class="num">{_fmt(actual_tpot, 1) if actual_tpot is not None else '—'} ms</td>
-        <td>{verdict(actual_tpot, target.get('tpot_p90_ms'))}</td></tr>
-        """
+            return ('<span class="pill passed">通过</span>'
+                    if value <= limit else '<span class="pill failed">未通过</span>')
+
+        compare_rows = "".join(
+            "<tr>"
+            f"<td>{label}</td>"
+            f"<td class='num'>≤ {_fmt(thresholds.get(key), 2)} {unit}</td>"
+            f"<td class='num'>{_fmt((target_point.get(field) if target_point else None) / scale, 2) if target_point and target_point.get(field) is not None else '—'} {unit}</td>"
+            f"<td>{verdict((target_point.get(field) / scale) if target_point and target_point.get(field) is not None else None, thresholds.get(key))}</td>"
+            "</tr>"
+            for key, label, field, scale, unit in active
+        )
         gap_html = ""
         if detail.get("gaps"):
             gap_html = f'<div class="callout bad"><strong>差距：</strong>{esc("；".join(detail["gaps"]))}</div>'
         probe_rows = []
         for point in probes:
-            passed = (
-                (point.get("ttft_p90_ms") or 0) < (target.get("ttft_p90_ms") or 0)
-                and (point.get("tpot_p90_ms") or 0) < (target.get("tpot_p90_ms") or 0)
+            ok = all(
+                (point.get(field) or 0) / scale <= thresholds.get(key)
+                for key, _label, field, scale, _unit in active
+                if thresholds.get(key)
             )
             verdict_html = (
-                '<span class="pill passed">满足</span>'
-                if passed
-                else '<span class="pill failed">不满足</span>'
+                '<span class="pill passed">满足</span>' if ok else '<span class="pill failed">不满足</span>'
             )
             probe_rows.append(
                 "<tr>"
                 f"<td class='num'>{_fmt_int(point.get('concurrency'))}</td>"
-                f"<td class='num'>{_fmt(point.get('ttft_p90_ms'), 1)}</td>"
-                f"<td class='num'>{_fmt(point.get('tpot_p90_ms'), 1)}</td>"
+                f"<td class='num'>{_fmt(point.get('ttft_avg_ms'), 1)} / {_fmt(point.get('ttft_p99_ms'), 1)}</td>"
+                f"<td class='num'>{_fmt(point.get('tpot_avg_ms'), 1)} / {_fmt(point.get('tpot_p99_ms'), 1)}</td>"
                 f"<td class='num'>{_fmt(point.get('throughput_tok_s'), 0)}</td>"
                 f"<td>{verdict_html}</td>"
                 "</tr>"
             )
         charts = ""
-        if probes:
-            charts = (
-                '<div class="charts-2">'
-                f'<div class="chart"><h3>TTFT.P90（秒）</h3>'
-                f'{svg_line_chart(probes, lambda p: (p.get("ttft_p90_ms") or 0)/1000, title="SLA TTFT.P90", unit="秒", threshold=(target.get("ttft_p90_ms") or 0)/1000, threshold_label="目标", color="#2563eb")}</div>'
-                f'<div class="chart"><h3>TPOT.P90（毫秒）</h3>'
-                f'{svg_line_chart(probes, lambda p: p.get("tpot_p90_ms"), title="SLA TPOT.P90", unit="毫秒", threshold=target.get("tpot_p90_ms"), threshold_label="目标", color="#0f9d8a")}</div>'
-                "</div>"
-            )
+        if probes and active:
+            cells = ""
+            for (key, label, field, scale, unit), color in zip(
+                active, ["#0071e3", "#ff9500", "#af52de", "#30b0c7"], strict=False
+            ):
+                cells += (
+                    f'<div class="chart"><h3>{label}（{unit}）</h3>'
+                    f'{svg_line_chart(probes, lambda p, f=field, s=scale: (p.get(f) or 0)/s, title=label, unit=unit, threshold=(thresholds.get(key) or 0), threshold_label="目标", color=color)}</div>'
+                )
+            charts = '<div class="charts-2">' + cells + "</div>"
         recommended = detail.get("recommended_concurrency")
         body = f"""
         <div class="grid">
           <div class="metric"><div class="k">结论</div><div class="v" style="font-size:21px;color:{color}">{esc(status)}</div><div class="s">{'目标并发下满足' if detail.get('target_met') else '目标并发下未满足'}</div></div>
-          <div class="metric"><div class="k">目标并发</div><div class="v">{_fmt_int(target.get('concurrency'))}</div><div class="s">{esc(target.get('context_length'))} 上下文</div></div>
-          <div class="metric"><div class="k">实测 TTFT.P90</div><div class="v">{_fmt(actual_ttft / 1000, 2) if actual_ttft is not None else '—'}</div><div class="s">秒</div></div>
-          <div class="metric"><div class="k">实测 TPOT.P90</div><div class="v">{_fmt(actual_tpot, 1) if actual_tpot is not None else '—'}</div><div class="s">毫秒</div></div>
-          <div class="metric"><div class="k">建议并发</div><div class="v">{_fmt_int(recommended)}</div><div class="s">{'EvalScope 原生建议（P90）' if strategy == 'auto_tune' else '目标并发达标值'}</div></div>
+          <div class="metric"><div class="k">目标并发</div><div class="v">{_fmt_int(target.get('concurrency'))}</div><div class="s">{esc(target.get('input_length'))} 输入 · {esc(target.get('output_tokens'))} 输出</div></div>
+          <div class="metric"><div class="k">建议并发</div><div class="v">{_fmt_int(recommended)}</div><div class="s">EvalScope 原生搜索结果</div></div>
         </div>
         <div class="table-wrap">
-        <table><thead><tr><th>指标</th><th class="num">目标</th><th class="num">实测（{_fmt_int(target.get('concurrency'))} 并发）</th><th>判定</th></tr></thead>
-        <tbody>{compare_rows}</tbody></table></div>
+        <table><thead><tr><th>指标</th><th class="num">目标（≤）</th><th class="num">实测（{_fmt_int(target.get('concurrency'))} 并发）</th><th>判定</th></tr></thead>
+        <tbody>{compare_rows or '<tr><td colspan="4" class="muted">未配置阈值</td></tr>'}</tbody></table></div>
         <div class="callout {cls}">{esc(detail.get('note') or '')}</div>
         {gap_html}
         {_command_block(item)}
         <div class="table-wrap">
-        <table><thead><tr><th class="num">并发</th><th class="num">TTFT.P90 (ms)</th><th class="num">TPOT.P90 (ms)</th><th class="num">吞吐 (tok/s)</th><th>判定</th></tr></thead>
+        <table><thead><tr><th class="num">并发</th><th class="num">TTFT avg/P99 (ms)</th><th class="num">TPOT avg/P99 (ms)</th><th class="num">吞吐 (tok/s)</th><th>判定</th></tr></thead>
         <tbody>{''.join(probe_rows) or '<tr><td colspan="5" class="muted">无有效探测点</td></tr>'}</tbody></table></div>
         {charts}
         """
@@ -739,7 +763,6 @@ def _agent_section(report: AcceptanceReport, item: ItemResult | None) -> str:
 def _criteria_section(report: AcceptanceReport) -> str:
     config = report.config_snapshot or {}
     sla = config.get("sla", {}) or {}
-    target = sla.get("target", {}) or {}
     accuracy = config.get("accuracy", {}) or {}
     agent = config.get("agent", {}) or {}
     perf = config.get("perf", {}) or {}
@@ -755,9 +778,9 @@ def _criteria_section(report: AcceptanceReport) -> str:
   <p class="lead">本次执行采用的默认预设；所有参数均外置于 config.yaml，可在现场按合同口径调整。</p>
   <div class="grid">
     <div class="kv"><div class="k">性能默认</div><div class="v">{perf_text}</div></div>
-    <div class="kv"><div class="k">SLA 目标</div><div class="v">TTFT.P90 &lt; {_fmt((target.get('ttft_p90_ms') or 10000)/1000, 1)}s；TPOT.P90 &lt; {_fmt(target.get('tpot_p90_ms') or 50, 0)}ms</div></div>
-    <div class="kv"><div class="k">SLA 并发</div><div class="v">{_fmt_int(target.get('concurrency'))} 并发 · {_fmt_int(target.get('context_length'))} 上下文</div></div>
-    <div class="kv"><div class="k">SLA 模式</div><div class="v">{'EvalScope 原生 auto_tune' if sla.get('mode') == 'auto_tune' else '目标并发单点 verify'}</div></div>
+    <div class="kv"><div class="k">SLA 目标</div><div class="v">{_sla_target_text({"thresholds": sla.get("thresholds")})}</div></div>
+    <div class="kv"><div class="k">SLA 口径</div><div class="v">{_fmt_int(sla.get("auto_tune", {}).get("upper") or sla.get("target", {}).get("concurrency") or 256)} 并发上限 · {_fmt_int(sla.get("input_length") or 65536)} 输入 · {_fmt_int(sla.get("output_tokens") or 512)} 输出</div></div>
+    <div class="kv"><div class="k">SLA 模式</div><div class="v">'EvalScope 原生 auto_tune（avg / P99 口径）'</div></div>
     <div class="kv"><div class="k">精度</div><div class="v">每项 {esc(accuracy.get('runs', 2))} 遍 · 稳定性阈值 {_fmt((accuracy.get('stability_threshold') or 0.01)*100, 1)}pp</div></div>
     <div class="kv"><div class="k">Agent</div><div class="v">{_fmt_int((agent.get('context_required') or 262144)/1024)}K · 服务级成功率阈值 {percent(agent.get('success_threshold'))} · {esc(agent.get('duration_s', 900))}s</div></div>
     <div class="kv"><div class="k">报告模式</div><div class="v">{'实机' if report.mode == 'live' else '模拟（不作验收依据）'}</div></div>

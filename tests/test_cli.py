@@ -86,7 +86,7 @@ def test_cli_single_item_with_scenario(tmp_path: Path, capsys):
             "--item",
             "multiturn",
             "--scenario",
-            "code",
+            "share_gpt_zh",
             "--outputs",
             str(outputs),
         ]
@@ -95,7 +95,7 @@ def test_cli_single_item_with_scenario(tmp_path: Path, capsys):
     assert "多轮对话" in capsys.readouterr().out
     reports = list((outputs / "runs").glob("*/report.json"))
     data = json.loads(reports[0].read_text(encoding="utf-8"))
-    assert data["items"]["multiturn"]["detail"]["scenario"] == "code"
+    assert data["items"]["multiturn"]["detail"]["scenario"] == "share_gpt_zh"
     assert data["conclusion"] == "未完成"
 
 

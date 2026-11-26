@@ -122,6 +122,9 @@ class EvalScopeEngine(Engine):
             for var, value in assets_hub.cache_env(hub).items():
                 env[var] = value
         env.setdefault("PYTHONUNBUFFERED", "1")
+        # 精度/压测均为 API 驱动，子进程不需要本机 GPU：禁用 CUDA 避免
+        # torch.cuda.is_available() 在部分 WSL/CUDA 组合下段错误（bfcl 依赖链带入 torch）
+        env.setdefault("CUDA_VISIBLE_DEVICES", "")
         env.setdefault("EVALSCOPE_LANGUAGE", "zh")
         env.setdefault("TERM", "dumb")
         return env
@@ -245,35 +248,47 @@ class EvalScopeEngine(Engine):
             collected: list[str] = []
             deadline = time.monotonic() + timeout_s if timeout_s and timeout_s > 0 else None
             timed_out = False
-            while True:
-                try:
-                    item = lines.get(timeout=0.25)
-                except queue.Empty:
-                    item = ""
-                if item is None:
-                    break
-                if item:
-                    clean = redact_secret(strip_ansi(item), effective_secret)
-                    log_file.write(clean)
-                    log_file.flush()
-                    if len(collected) < 100_000:
-                        collected.append(clean)
-                    stripped = clean.rstrip()
-                    if log and stripped and not stripped.startswith(("╭", "╰", "┌", "└", "├", "┃")):
-                        log(stripped[:600])
-                if cancel is not None and cancel.is_set():
-                    self._terminate(process)
-                    raise CancelledError("用户已取消，已终止 EvalScope 进程")
-                if deadline is not None and time.monotonic() > deadline:
-                    timed_out = True
-                    self._terminate(process)
-                    break
-
             try:
-                returncode = process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
+                while True:
+                    try:
+                        item = lines.get(timeout=0.25)
+                    except queue.Empty:
+                        item = ""
+                    if item is None:
+                        break
+                    if item:
+                        clean = redact_secret(strip_ansi(item), effective_secret)
+                        log_file.write(clean)
+                        log_file.flush()
+                        if len(collected) < 800_000:
+                            collected.append(clean)
+                        stripped = clean.rstrip()
+                        if log and stripped:
+                            log(stripped[:1200])
+                    if cancel is not None and cancel.is_set():
+                        self._terminate(process)
+                        raise CancelledError("用户已取消，已终止 EvalScope 进程")
+                    if deadline is not None and time.monotonic() > deadline:
+                        timed_out = True
+                        self._terminate(process)
+                        break
+
+                try:
+                    returncode = process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    self._terminate(process)
+                    returncode = -9
+            except KeyboardInterrupt:
+                # 进程级中断（Ctrl+C / 关闭终端）：终止子进程并转为可处理的取消语义，
+                # 由上层 _execute_one 的 finally 落盘报告
                 self._terminate(process)
-                returncode = -9
+                if cancel is not None:
+                    cancel.set()
+                raise CancelledError("执行被中断，已终止 EvalScope 进程") from None
+            finally:
+                # 任何异常退出路径都不允许留下孤儿子进程
+                if process.poll() is None:
+                    self._terminate(process)
             text = "".join(collected)
             if timed_out:
                 raise EvalScopeError(f"EvalScope 执行超时（{int(timeout_s)}s），详见 {log_path}")
@@ -369,6 +384,8 @@ class EvalScopeEngine(Engine):
             )
             if params.prefix_length > 0:
                 argv.extend(["--prefix-length", str(params.prefix_length)])
+                if params.prefix_count > 1:
+                    argv.extend(["--prefix-count", str(params.prefix_count)])
         if params.warmup_num > 0:
             argv.extend(["--warmup-num", str(params.warmup_num)])
         argv.extend([str(arg) for arg in params.extra_args])
@@ -428,11 +445,12 @@ class EvalScopeEngine(Engine):
 
     # -------------------------------------------------------------- multiturn
     def _multiturn_argv(self, endpoint: Endpoint, params: MultiturnParams, output_dir: Path) -> list[str]:
+        builtin = bool(params.dataset_name)
         mapping = self._base_mapping(endpoint, output_dir)
         mapping.update(
             {
-                "dataset": "custom_multi_turn",
-                "dataset_path": str(params.dataset_path),
+                "dataset": params.dataset_name or "custom_multi_turn",
+                "dataset_path": str(params.dataset_path or ""),
                 "parallel": params.parallel,
                 "number": params.conversations,
                 "max_turns": params.max_turns,
@@ -452,9 +470,13 @@ class EvalScopeEngine(Engine):
             "--api",
             "openai",
             "--dataset",
-            "custom_multi_turn",
-            "--dataset-path",
-            str(params.dataset_path),
+            params.dataset_name or "custom_multi_turn",
+        ]
+        if not builtin:
+            argv.extend(["--dataset-path", str(params.dataset_path)])
+        if params.tokenizer_path:
+            argv.extend(["--tokenizer-path", params.tokenizer_path])
+        argv.extend([
             "--multi-turn",
             "--min-turns",
             str(params.min_turns),
@@ -472,7 +494,7 @@ class EvalScopeEngine(Engine):
             "--no-timestamp",
             "--total-timeout",
             str(params.request_timeout_s),
-        ]
+        ])
         if endpoint.api_key:
             argv.extend(["--api-key", endpoint.api_key])
         argv.extend([str(arg) for arg in params.extra_args])
@@ -486,8 +508,9 @@ class EvalScopeEngine(Engine):
         log: LogFn | None = None,
         cancel: threading.Event | None = None,
     ) -> MultiturnDetail:
-        if not params.dataset_path.exists():
-            raise AssetError(f"多轮对话预设数据不存在：{params.dataset_path}")
+        if not params.dataset_name:
+            if params.dataset_path is None or not params.dataset_path.exists():
+                raise AssetError(f"多轮对话预设数据不存在：{params.dataset_path}")
         output_dir.mkdir(parents=True, exist_ok=True)
         argv = self._multiturn_argv(endpoint, params, output_dir)
         result = self._run(
@@ -577,7 +600,11 @@ class EvalScopeEngine(Engine):
         dataset_args: dict[str, Any] = dict(params.dataset_args or {})
         if params.subset:
             existing = dataset_args.get("subset_list") or []
-            dataset_args["subset_list"] = [params.subset] if not isinstance(existing, list) else existing
+            if not isinstance(existing, list):
+                existing = [existing]
+            if params.subset not in existing:
+                existing.append(params.subset)
+            dataset_args["subset_list"] = existing
         if dataset_args:
             argv.extend(["--dataset-args", json.dumps({params.dataset: dataset_args}, ensure_ascii=False)])
         if params.request_timeout_s:
@@ -656,12 +683,20 @@ class EvalScopeEngine(Engine):
 
     # ------------------------------------------------------------------ agent
     def _agent_argv(self, endpoint: Endpoint, params: AgentParams, output_dir: Path) -> list[str]:
-        scenario = params.scenario_name
+        # AgentX 场景统一以 JSON 传入（evalscope 支持完整字段）：
+        # - variant 按目标上下文自动选择（≥128K 用 256k 变体，否则 full）
+        # - max_context_length 交给 AgentX 原生裁剪 trace
+        # - 上下文不足/短时长时进入 smoke 模式（trace_limit 用内置默认）
+        scenario_obj: dict[str, Any] = {
+            "name": params.scenario_name,
+            "variant": "256k" if params.target_context >= 131072 else "full",
+            "max_context_length": params.target_context,
+        }
         if params.degraded:
-            scenario = json.dumps(
-                {"name": params.scenario_name, "mode": params.degraded_mode},
-                ensure_ascii=False,
-            )
+            scenario_obj["mode"] = params.degraded_mode
+            if params.degraded_mode == "smoke":
+                scenario_obj["trace_limit"] = 4
+        scenario = json.dumps(scenario_obj, ensure_ascii=False)
         mapping = self._base_mapping(endpoint, output_dir)
         mapping.update(
             {
@@ -766,15 +801,17 @@ class EvalScopeEngine(Engine):
 
     # -------------------------------------------------------------- SLA native
     def _sla_argv(self, endpoint: Endpoint, params: SlaNativeParams, output_dir: Path) -> list[str]:
-        sla_params = json.dumps(
-            [
-                {
-                    "p90_ttft": f"<{params.ttft_p90_ms:g}ms",
-                    "p90_tpot": f"<{params.tpot_p90_ms:g}ms",
-                }
-            ],
-            ensure_ascii=False,
-        )
+        # EvalScope SLA 指标：avg_latency/avg_ttft/avg_tpot/p99_latency/p99_ttft/p99_tpot
+        # 阈值键单位：ttft 秒、tpot 毫秒；同一组内全部满足才算达标
+        unit = {"avg_ttft_s": "s", "p99_ttft_s": "s", "avg_tpot_ms": "ms", "p99_tpot_ms": "ms"}
+        criteria: dict[str, str] = {}
+        for key, value in params.thresholds.items():
+            if not value or key not in unit:
+                continue
+            criteria[key.removesuffix("_s").removesuffix("_ms")] = f"<= {value:g}{unit[key]}"
+        if not criteria:
+            raise EvalScopeError("SLA 阈值未配置（avg_ttft_s / avg_tpot_ms / p99_ttft_s / p99_tpot_ms 至少一项）")
+        sla_params = json.dumps([criteria], ensure_ascii=False)
         mapping = self._base_mapping(endpoint, output_dir)
         mapping.update(
             {
@@ -809,9 +846,9 @@ class EvalScopeEngine(Engine):
             "--max-prompt-length",
             str(params.target_context),
             "--min-tokens",
-            "256",
+            str(params.output_tokens),
             "--max-tokens",
-            "256",
+            str(params.output_tokens),
             "--sla-auto-tune",
             "--sla-variable",
             params.variable,
@@ -831,6 +868,11 @@ class EvalScopeEngine(Engine):
         ]
         if endpoint.api_key:
             argv.extend(["--api-key", endpoint.api_key])
+        prefix_length = round(params.target_context * max(0.0, min(1.0, params.prefix_ratio)))
+        if params.prefix_ratio > 0 and prefix_length > 0:
+            argv.extend(["--prefix-length", str(prefix_length)])
+            if params.prefix_count > 1:
+                argv.extend(["--prefix-count", str(params.prefix_count)])
         argv.extend([str(arg) for arg in params.extra_args])
         return argv
 
@@ -870,23 +912,14 @@ class EvalScopeEngine(Engine):
                 f"EvalScope 未探测目标并发 {params.upper}；原生建议并发为 "
                 f"{recommended if recommended is not None else '无'}"
             )
-        if target_point and not target_met:
-            if target_point.ttft_p90_ms >= params.ttft_p90_ms:
-                gaps.append(
-                    f"TTFT.P90 实测 {target_point.ttft_p90_ms / 1000:.2f}s，"
-                    f"未达到 <{params.ttft_p90_ms / 1000:.2f}s"
-                )
-            if target_point.tpot_p90_ms >= params.tpot_p90_ms:
-                gaps.append(
-                    f"TPOT.P90 实测 {target_point.tpot_p90_ms:.1f}ms，"
-                    f"未达到 <{params.tpot_p90_ms:.1f}ms"
-                )
         detail = SlaDetail(
             target=SlaTarget(
-                context_length=params.target_context,
+                input_length=params.target_context,
+                output_tokens=params.output_tokens,
+                prefix_ratio=params.prefix_ratio,
+                prefix_count=params.prefix_count,
                 concurrency=params.upper,
-                ttft_p90_ms=params.ttft_p90_ms,
-                tpot_p90_ms=params.tpot_p90_ms,
+                thresholds=params.thresholds,
             ),
             strategy="native",
             target_met=target_met,
@@ -896,7 +929,7 @@ class EvalScopeEngine(Engine):
             best=best,
             gaps=gaps,
             note=(
-                "数值来自 EvalScope 原生 `perf --sla-auto-tune`，阈值使用 p90_ttft / p90_tpot；"
+                "数值与达标判定均来自 EvalScope 原生 `perf --sla-auto-tune`（avg / p99 口径）；"
                 "建议并发为 EvalScope 原生搜索结果，可原样复现。"
             ),
             output_dir=str(output_dir),

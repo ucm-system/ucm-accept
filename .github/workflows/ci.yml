@@ -2,7 +2,11 @@ name: ci
 
 on:
   push:
-    branches: [main, master]
+    branches:
+      - main
+      - master
+      - "feat/**"
+      - "v*.*.*"
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
@@ -57,6 +61,14 @@ jobs:
         run: |
           ucm-accept --mock --fast --item perf --outputs /tmp/ucm-export --report /tmp/ucm-export/report.html
           test -s /tmp/ucm-export/report.html
+      - name: Asset pack smoke (AssetHub)
+        run: |
+          python scripts/prepare_assets.py --assets-dir /tmp/ucm-assets --init --seed-bundled
+          python scripts/prepare_assets.py --assets-dir /tmp/ucm-assets
+          UCM_ASSETS_DIR=/tmp/ucm-assets ucm-accept --doctor --mock | grep -q "资产包"
+          UCM_ASSETS_DIR=/tmp/ucm-assets ucm-accept --doctor --mock | grep -q "SHA256"
+          UCM_ASSETS_DIR=/tmp/ucm-assets ucm-accept --mock --fast --item perf --outputs /tmp/ucm-assets-smoke
+          test -s /tmp/ucm-assets-smoke/runs/*/report.html
 
   actionlint:
     name: actionlint

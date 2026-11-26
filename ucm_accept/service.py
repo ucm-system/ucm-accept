@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -128,6 +129,9 @@ class AcceptanceService:
             raise UCMAcceptError("已有验收任务正在执行，请等待完成")
         self._running = True
         try:
+            # 每次执行都使用全新的 run（新 run_id/目录/报告），避免多次执行互相覆盖
+            self._orchestrator = None
+            self._engine = None
             orchestrator = self._ensure_orchestrator(progress)
             return orchestrator.run_item(key, scenario=scenario)
         finally:
@@ -144,6 +148,9 @@ class AcceptanceService:
             raise UCMAcceptError("已有验收任务正在执行，请等待完成")
         self._running = True
         try:
+            # 每次执行都使用全新的 run（新 run_id/目录/报告），避免多次执行互相覆盖
+            self._orchestrator = None
+            self._engine = None
             orchestrator = self._ensure_orchestrator(progress)
             return orchestrator.run_all(keys)
         finally:
@@ -151,8 +158,36 @@ class AcceptanceService:
             self._lock.release()
 
     def cancel(self) -> None:
+        """请求停止当前验收任务（置位取消事件，由执行线程终止子进程并落盘）。"""
         if self._orchestrator is not None:
             self._orchestrator.cancel()
+
+    def shutdown(self, timeout: float = 10.0) -> None:
+        """请求停止并等待当前任务收尾（报告落盘），供进程退出前的信号处理调用。"""
+        if not self._running:
+            return
+        self.cancel()
+        deadline = time.monotonic() + max(0.0, timeout)
+        while self._running and time.monotonic() < deadline:
+            time.sleep(0.1)
+
+    def load_latest_report(self) -> bool:
+        """从输出目录加载最近一次报告（页面重开 / 进程重启后恢复现场）。
+
+        成功返回 True；无报告、读取失败或任务执行中返回 False。
+        """
+        if self._running:
+            return False
+        path = find_latest_report(self.outputs_root)
+        if not path:
+            return False
+        try:
+            report = AcceptanceReport.load_json(path)
+        except Exception:  # noqa: BLE001 - 报告损坏时静默回退到空现场
+            return False
+        orchestrator = self._ensure_orchestrator(None)
+        orchestrator.report = report
+        return True
 
     def reset(self) -> None:
         if self._running:

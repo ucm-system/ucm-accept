@@ -149,6 +149,15 @@ class Config:
     def to_dict(self) -> dict[str, Any]:
         return copy.deepcopy(self._data)
 
+    def to_yaml(self) -> str:
+        """当前生效配置的 YAML 文本（API Key 不落盘）。"""
+        import copy as _copy
+
+        data = _copy.deepcopy(self._data)
+        if data.get("endpoint", {}).get("api_key"):
+            data["endpoint"]["api_key"] = ""
+        return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
+
     def save(self, path: str | Path) -> Path:
         """把当前生效配置另存为 YAML（覆盖内置默认 + 运行时改动），供 --config 复用。
 
@@ -272,20 +281,27 @@ class Config:
             raise ConfigError("perf.min_prompt_length 不能大于 max_prompt_length")
 
         mode = self.get("sla.mode", "auto_tune")
-        if mode not in {"verify", "auto_tune"}:
-            raise ConfigError("sla.mode 只能是 verify 或 auto_tune")
+        if mode != "auto_tune":
+            raise ConfigError("sla.mode 只能是 auto_tune（达标判定完全由 EvalScope --sla-auto-tune 完成）")
         lower = int(self.get("sla.auto_tune.lower", 1))
         upper = int(self.get("sla.auto_tune.upper", 200))
         if lower <= 0 or upper <= 0 or lower > upper:
             raise ConfigError("SLA 自动调优区间非法：需满足 0 < lower <= upper")
-        target_conc = int(self.get("sla.target.concurrency", 200))
-        if mode == "auto_tune" and upper < target_conc:
+        target_conc = int(self.get("sla.target.concurrency", 256))
+        if upper < target_conc:
             raise ConfigError("sla.auto_tune.upper 不能小于 sla.target.concurrency，否则无法判定目标并发是否达标")
         if target_conc <= 0:
             raise ConfigError("sla.target.concurrency 必须大于 0")
-        for key in ("sla.target.context_length", "sla.target.ttft_p90_ms", "sla.target.tpot_p90_ms"):
+        for key in ("sla.input_length", "sla.output_tokens"):
             if float(self.get(key, 0)) <= 0:
                 raise ConfigError(f"{key} 必须大于 0")
+        ratio = float(self.get("sla.prefix_ratio", 0.9))
+        if not 0 <= ratio <= 1:
+            raise ConfigError("sla.prefix_ratio 需在 0..1 之间")
+        # 阈值至少配置一档（avg/p99 任意组合），由 EvalScope --sla-auto-tune 判定
+        thresholds = self.get("sla.thresholds", {}) or {}
+        if not any(value for value in thresholds.values()):
+            raise ConfigError("sla.thresholds 至少配置一档（avg_ttft_s / avg_tpot_ms / p99_ttft_s / p99_tpot_ms）")
 
         if int(self.get("accuracy.runs", 2)) < 1:
             raise ConfigError("accuracy.runs 至少为 1")

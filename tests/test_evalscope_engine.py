@@ -66,12 +66,12 @@ def test_accuracy_parses_native_report(tmp_path: Path, engine: EvalScopeEngine):
     assert (tmp_path / "accuracy" / "ucm_accuracy_run.json").exists()
 
 
-def test_multiturn_uses_native_multi_turn(tmp_path: Path, engine: EvalScopeEngine):
-    dataset = Path("ucm_accept/resources/datasets/multiturn/dialogue.jsonl")
+def test_multiturn_uses_builtin_dataset_name(tmp_path: Path, engine: EvalScopeEngine):
     params = MultiturnParams(
-        scenario_key="dialogue",
-        scenario_label="对话",
-        dataset_path=dataset,
+        scenario_key="share_gpt_zh",
+        scenario_label="真实对话数据集（中文）",
+        dataset_name="share_gpt_zh_multi_turn",
+        dataset_path=None,
         parallel=4,
         conversations=12,
         min_turns=2,
@@ -85,7 +85,8 @@ def test_multiturn_uses_native_multi_turn(tmp_path: Path, engine: EvalScopeEngin
     assert detail.total_turns > 0
     command = (tmp_path / "multiturn" / "command.txt").read_text(encoding="utf-8")
     assert "--multi-turn" in command
-    assert "custom_multi_turn" in command
+    assert "--dataset share_gpt_zh_multi_turn" in command
+    assert "--dataset-path" not in command
 
 
 def test_agentx_parses_summary(tmp_path: Path, engine: EvalScopeEngine):
@@ -105,23 +106,31 @@ def test_agentx_parses_summary(tmp_path: Path, engine: EvalScopeEngine):
     assert detail.submission_valid is True
 
 
-def test_sla_native_uses_p90_parameters(tmp_path: Path, engine: EvalScopeEngine):
+def test_sla_native_uses_avg_p99_thresholds(tmp_path: Path, engine: EvalScopeEngine):
     params = SlaNativeParams(
         target_context=65536,
         upper=200,
         lower=2,
-        ttft_p90_ms=10000,
-        tpot_p90_ms=50,
         number=200,
         num_runs=1,
         number_multiplier=2,
+        output_tokens=512,
+        prefix_ratio=0.9,
+        prefix_count=8,
+        thresholds={"avg_ttft_s": 30, "avg_tpot_ms": 50},
         tokenizer_path="/models/tokenizer",
     )
     detail = engine.run_sla_native(endpoint(), params, tmp_path / "sla")
     command = (tmp_path / "sla" / "command.txt").read_text(encoding="utf-8")
     assert "--sla-auto-tune" in command
-    assert "p90_ttft" in command
-    assert "p90_tpot" in command
+    assert "avg_ttft" in command
+    assert "avg_tpot" in command
+    assert "<= 30s" in command
+    assert "<= 50ms" in command
+    # 压测口径：输入/输出/前缀
+    assert "--max-model-len" not in command
+    assert "--prefix-count 8" in command
+    assert "--min-tokens 512" in command
     assert detail.strategy == "native"
     assert detail.recommended_concurrency == 160
 

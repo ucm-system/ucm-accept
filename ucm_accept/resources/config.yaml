@@ -39,21 +39,25 @@ endpoint:
 
 defaults:
   context_length: 65536
-  concurrency: 20
-  requests: 200
+  concurrency: 8
+  requests: 64
   input_length: 65536
-  output_length: 256
-  hit_rate: 0.0
+  output_length: 512
+  hit_rate: 0.9
 
 perf:
-  # 并发梯度；默认单点 20 并发，可在高级选项中改为 [10, 20, 40]。
-  parallel: [20]
-  number: 200
-  warmup_num: 20
+  # 并发梯度；默认单点 8 并发，可改为 [4, 8, 16] 等梯度。
+  parallel: [8]
+  number: 64
+  warmup_num: 0
+  # 输入长度（min = max，同一值）。
   min_prompt_length: 65536
   max_prompt_length: 65536
-  min_tokens: 256
-  max_tokens: 256
+  # 输出 tokens（min = max，同一值）。
+  min_tokens: 512
+  max_tokens: 512
+  # 前缀命中：prefix-length = 输入长度 × 命中率（取整）；prefix-count 为前缀种数。
+  prefix_count: 32
   tokenizer_path: Qwen/Qwen2.5-0.5B-Instruct
   dataset: random
   request_timeout_s: 21600
@@ -62,21 +66,35 @@ perf:
   env: {}
 
 multiturn:
-  scenario: dialogue
+  scenario: share_gpt_zh
+  # 数据集为 EvalScope 内置多轮场景，首次执行从 ModelScope 拉取并缓存（离线可预置）。
   scenarios:
-    dialogue:
-      label: 对话
-      description: 日常多轮问答，验证上下文累积后的响应质量与稳定性
-      dataset_path: datasets/multiturn/dialogue.jsonl
-    code:
-      label: 代码
-      description: 代码理解与修改类多轮任务，验证长上下文代码场景
-      dataset_path: datasets/multiturn/code.jsonl
-    office:
-      label: 办公
-      description: 文档摘要、表格与邮件类多轮任务，贴近办公场景
-      dataset_path: datasets/multiturn/office.jsonl
+    share_gpt_zh:
+      label: 真实对话数据集（中文）
+      dataset: share_gpt_zh_multi_turn
+      description: ShareGPT 中文真实多轮对话，覆盖日常问答与任务型对话
+    share_gpt_en:
+      label: 真实对话数据集（英文）
+      dataset: share_gpt_en_multi_turn
+      description: ShareGPT 英文真实多轮对话，覆盖通用与代码类对话
+    swe_smith:
+      label: 真实 Agent 代码修复
+      dataset: swe_smith
+      description: SWE-smith 轨迹现场构建的多轮代码修复任务（live 构建模式）
+    trie_agentic_coding:
+      label: IDE 代码补全类应用
+      dataset: trie_agentic_coding
+      description: trie 采集的编码 Agent 真实轨迹回放（约 8K 上下文，ignore_eos 定长回放）
+    trie_code_qa:
+      label: 代码问答 agent
+      dataset: trie_code_qa
+      description: trie 采集的代码问答 Agent 真实轨迹回放（约 8K 上下文）
+    trie_office_work:
+      label: 办公自动化 agent
+      dataset: trie_office_work
+      description: trie 采集的办公自动化 Agent 真实轨迹回放（约 8K 上下文）
   parallel: 4
+  # 会话组数：--number 语义为共发起多少条多轮会话（每条会话含多轮，轮数由数据集决定）。
   conversations: 12
   min_turns: 2
   max_turns: 5
@@ -86,23 +104,29 @@ multiturn:
   extra_args: []
 
 sla:
-  # auto_tune : 调用 EvalScope --sla-auto-tune，原生支持 p90_ttft / p90_tpot（默认，验收主流程）
-  # verify    : 只跑目标并发（200）一个点，用 EvalScope perf 实测 P90 判定是否达标（快速复核）
+  # SLA 达标判定完全由 EvalScope 原生 --sla-auto-tune 完成（不使用任何自研判定）。
   mode: auto_tune
+  # 压测输入口径
+  input_length: 65536
+  output_tokens: 512
+  prefix_ratio: 0.9
+  prefix_count: 8
   target:
-    context_length: 65536
-    concurrency: 200
-    ttft_p90_ms: 10000
-    tpot_p90_ms: 50
-  verify:
-    number: 200
-    warmup_num: 0
+    concurrency: 256
+  # 达标阈值（多档，任填；留空的档位不参与判定）：
+  # avg_ttft_s 秒 / avg_tpot_ms 毫秒 / p99_ttft_s 秒 / p99_tpot_ms 毫秒
+  thresholds:
+    avg_ttft_s: 30
+    avg_tpot_ms: 50
+    p99_ttft_s: null
+    p99_tpot_ms: null
+  # 与原命令一一对应，便于客户复现：
+  # evalscope perf ... --sla-auto-tune --sla-variable parallel \
+  #   --sla-params '[{"avg_ttft":"<= 30s","avg_tpot":"<= 50ms"}]'
   auto_tune:
     lower: 2
-    upper: 200
-    # 与原命令一一对应，便于客户复现：
-    # evalscope perf ... --sla-auto-tune --sla-variable parallel \
-    #   --sla-params '[{"p90_ttft":"<10000ms","p90_tpot":"<50ms"}]'
+    upper: 256
+    number: 200
     variable: parallel
     num_runs: 2
     number_multiplier: 2
@@ -110,7 +134,7 @@ sla:
 
 accuracy:
   runs: 2
-  limit: 100
+  # limit 不配置时跑全量；需要抽样时在数据集条目或此处单独设置 limit
   stability_threshold: 0.01
   request_timeout_s: 14400
   # 每项精度测试独立执行；默认四类数据集各跑两遍，用于验证 KVCache 落盘一致性。
@@ -120,30 +144,26 @@ accuracy:
       label: 基础问答
       dataset: gpqa_diamond
       subset: ""
-      limit: 50
       enabled: true
       description: GPQA Diamond，研究生级问答，衡量基础知识与推理
     gsm8k:
       label: 数学推理
       dataset: gsm8k
       subset: ""
-      limit: 100
       enabled: true
       description: GSM8K，小学数学应用题，衡量多步推理
     longbench_v2:
       label: 长文本
       dataset: longbench_v2
       subset: short
-      limit: 40
       enabled: true
       description: LongBench-v2 short 子集，衡量长上下文理解
     bfcl_v3:
       label: 工具调用
       dataset: bfcl_v3
       subset: ""
-      limit: 40
       enabled: true
-      description: BFCL-v3，函数调用与工具选择能力
+      description: BFCL-v3，函数调用与工具选择能力；需被测服务启用工具调用（vLLM 示例：--enable-auto-tool-choice --tool-call-parser hermes）
   extra_args: []
 
 agent:

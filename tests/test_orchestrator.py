@@ -11,7 +11,7 @@ from ucm_accept.orchestrator import Orchestrator
 
 
 def test_mock_full_acceptance(config: Config):
-    config.set("sla.mode", "verify")
+    config.set("sla.mode", "auto_tune")
     orchestrator = Orchestrator(config, MockEngine(profile="nominal", delay_ms=0))
     report = orchestrator.run_all()
     assert report.conclusion == "通过"
@@ -35,7 +35,7 @@ def test_mock_partial_report_is_incomplete(config: Config):
 
 
 def test_run_all_with_subset_keys(config: Config):
-    config.set("sla.mode", "verify")
+    config.set("sla.mode", "auto_tune")
     orchestrator = Orchestrator(config, MockEngine(delay_ms=0))
     report = orchestrator.run_all(["sla", "perf"])
     assert set(report.items) == {"perf", "sla"}
@@ -49,7 +49,7 @@ def test_run_all_with_subset_keys(config: Config):
 
 def test_run_all_respects_config_run_items(config: Config):
     config.set("run.items", ["perf", "multiturn"])
-    config.set("sla.mode", "verify")
+    config.set("sla.mode", "auto_tune")
     orchestrator = Orchestrator(config, MockEngine(delay_ms=0))
     report = orchestrator.run_all()
     assert set(report.items) == {"perf", "multiturn"}
@@ -57,7 +57,7 @@ def test_run_all_respects_config_run_items(config: Config):
 
 
 def test_run_all_subset_drops_stale_items(config: Config):
-    config.set("sla.mode", "verify")
+    config.set("sla.mode", "auto_tune")
     orchestrator = Orchestrator(config, MockEngine(delay_ms=0))
     orchestrator.run_all()          # 先跑全部
     report = orchestrator.run_all(["perf", "sla"])  # 再跑子集
@@ -85,7 +85,7 @@ def test_accuracy_respects_dataset_enabled(config: Config):
 
 
 def test_mock_degraded_profile_fails_sla(config: Config):
-    config.set("sla.mode", "verify")
+    config.set("sla.mode", "auto_tune")
     orchestrator = Orchestrator(config, MockEngine(profile="degraded", delay_ms=0))
     report = orchestrator.run_all()
     assert report.items["sla"].status == Status.FAILED
@@ -93,17 +93,17 @@ def test_mock_degraded_profile_fails_sla(config: Config):
     assert report.conclusion == "不通过"
 
 
-def test_multiturn_scenario_code(config: Config):
+def test_multiturn_scenario_builtin(config: Config):
     orchestrator = Orchestrator(config, MockEngine(delay_ms=0))
-    item = orchestrator.run_item("multiturn", scenario="code")
+    item = orchestrator.run_item("multiturn", scenario="share_gpt_zh")
     assert item.status == Status.PASSED
-    assert item.detail["scenario"] == "code"
-    assert item.detail["label"] == "代码"
+    assert item.detail["scenario"] == "share_gpt_zh"
+    assert item.detail["label"] == "真实对话数据集（中文）"
 
 
 def test_accuracy_single_run_is_warning(config: Config):
     config.set("accuracy.runs", 1)
-    config.set("sla.mode", "verify")
+    config.set("sla.mode", "auto_tune")
     orchestrator = Orchestrator(config, MockEngine(delay_ms=0))
     item = orchestrator.run_item("accuracy")
     assert item.status == Status.WARNING
@@ -125,7 +125,7 @@ def test_sla_auto_tune_mode(config: Config):
     item = orchestrator.run_item("sla")
     assert item.detail["strategy"] == "native"
     assert item.status in {Status.PASSED, Status.WARNING, Status.FAILED}
-    assert "p90" in item.detail["note"]
+    assert "avg / p99" in item.detail["note"]
 
 
 def test_progress_events_are_monotonic(config: Config):

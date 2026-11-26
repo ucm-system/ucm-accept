@@ -177,3 +177,12 @@ def find_sdk_snapshot(root: Path, dataset_id: str) -> str:
             if any(revision_dir.iterdir()):
                 return str(revision_dir.resolve())
     return ""
+
+
+def builtin_tokenizers(root: Path) -> list[str]:
+    """资产包内可用的内置 tokenizer 名称列表（tokenizers/ 下的一级目录）。"""
+    base = root / "tokenizers"
+    if not base.is_dir():
+        return []
+    return sorted(p.name for p in base.iterdir() if p.is_dir())
+

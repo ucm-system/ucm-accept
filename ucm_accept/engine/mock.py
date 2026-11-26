@@ -84,8 +84,8 @@ class MockEngine(Engine):
             tpot_p90 = 18.0 + 0.115 * concurrency
             success = params.number
         else:
-            ttft_p90 = (3000 + 48.0 * concurrency) * factor
-            tpot_p90 = 20.0 + 0.19 * concurrency
+            ttft_p90 = (4200 + 62.0 * concurrency) * factor
+            tpot_p90 = 70.0 + 0.30 * concurrency
             success = params.number
         jitter = self._jitter(f"perf:{concurrency}", 0.008)
         ttft_p90 *= jitter
@@ -203,7 +203,9 @@ class MockEngine(Engine):
         cancel: threading.Event | None = None,
     ) -> MultiturnDetail:
         output_dir.mkdir(parents=True, exist_ok=True)
-        if not params.dataset_path.exists():
+        if params.dataset_name:
+            pass  # 内置场景名由 EvalScope 解析
+        elif params.dataset_path is None or not params.dataset_path.exists():
             raise FileNotFoundError(f"多轮对话预设数据不存在：{params.dataset_path}")
         self._write_command(
             output_dir,
@@ -368,8 +370,10 @@ class MockEngine(Engine):
             number=params.number,
             min_prompt_length=params.target_context,
             max_prompt_length=params.target_context,
-            min_tokens=256,
-            max_tokens=256,
+            min_tokens=params.output_tokens,
+            max_tokens=params.output_tokens,
+            prefix_length=round(params.target_context * max(0.0, min(1.0, params.prefix_ratio))),
+            prefix_count=params.prefix_count,
             context_length=params.target_context,
         )
         candidates = sorted({params.lower, max(params.lower, 100), max(params.lower, 150), params.upper})
@@ -380,27 +384,31 @@ class MockEngine(Engine):
             (point for point in points if point.concurrency == params.upper),
             max(points, key=lambda point: point.concurrency),
         )
-        target_met = target_point.meets(params.ttft_p90_ms, params.tpot_p90_ms)
-        passing = [point for point in points if point.meets(params.ttft_p90_ms, params.tpot_p90_ms)]
+        # 以下比较仅用于生成模拟演示数据（等价于原生 --sla-auto-tune 的输出形态），
+        # 真实验收判定完全由 EvalScope --sla-auto-tune 完成，此处不构成判定工具。
+        def _mock_pass(point: PerfPoint) -> bool:
+            t = params.thresholds or {}
+            checks = {
+                "avg_ttft_s": (point.ttft_avg_ms, 1000.0),
+                "avg_tpot_ms": (point.tpot_avg_ms, 1.0),
+                "p99_ttft_s": (point.ttft_p99_ms, 1000.0),
+                "p99_tpot_ms": (point.tpot_p99_ms, 1.0),
+            }
+            active = [(k, v) for k, v in t.items() if v and k in checks]
+            return bool(active) and all(actual <= limit * scale for k, limit in active
+                                        for actual, scale in [checks[k]])
+        target_met = _mock_pass(target_point)
+        passing = [point for point in points if _mock_pass(point)]
         best = max(passing, key=lambda point: point.concurrency) if passing else None
-        gaps = []
-        if not target_met:
-            if target_point.ttft_p90_ms >= params.ttft_p90_ms:
-                gaps.append(
-                    f"TTFT.P90 实测 {target_point.ttft_p90_ms / 1000:.2f}s，"
-                    f"超出阈值 {params.ttft_p90_ms / 1000:.2f}s"
-                )
-            if target_point.tpot_p90_ms >= params.tpot_p90_ms:
-                gaps.append(
-                    f"TPOT.P90 实测 {target_point.tpot_p90_ms:.1f}ms，"
-                    f"超出阈值 {params.tpot_p90_ms:.1f}ms"
-                )
+        gaps = [] if target_met else ["模拟演示数据：目标并发未达阈值（详见 sla_summary.json）"]
         detail = SlaDetail(
             target=SlaTarget(
-                context_length=params.target_context,
+                input_length=params.target_context,
+                output_tokens=params.output_tokens,
+                prefix_ratio=params.prefix_ratio,
+                prefix_count=params.prefix_count,
                 concurrency=params.upper,
-                ttft_p90_ms=params.ttft_p90_ms,
-                tpot_p90_ms=params.tpot_p90_ms,
+                thresholds=params.thresholds,
             ),
             strategy="native",
             target_met=target_met,
@@ -409,7 +417,7 @@ class MockEngine(Engine):
             probes=points,
             best=best,
             gaps=gaps,
-            note="模拟 EvalScope 原生 SLA 结果（p90_ttft / p90_tpot 口径）。",
+            note="模拟 EvalScope 原生 SLA 结果（avg / p99 口径）。",
             output_dir=str(output_dir),
         )
         (output_dir / "sla_summary.json").write_text(

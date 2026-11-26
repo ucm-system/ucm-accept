@@ -391,11 +391,11 @@ A：EvalScope AgentX 是服务级长会话压测，不输出任务质量分。�
 **Q：为什么多轮对话没有回放内容？**
 A：EvalScope 多轮压测只输出统计指标。工具不生成伪造记录，保留原始 EvalScope 报告供人工复核。
 
-**Q：SLA 的 P90 参数在旧版 EvalScope 不存在怎么办？**
-A：升级到 >= 1.15；或在 `config.yaml` 将 `sla.mode` 设为 `verify`，只测目标并发（200）的 P90。
+**Q：SLA 的 avg / P99 参数在旧版 EvalScope 不存在怎么办？**
+A：升级到 >= 1.15（`--sla-auto-tune` 支持 avg / p99 的 latency / ttft / tpot 指标）。
 
-**Q：能否只用 CLI，不安装 Gradio？**
-A：可以。GUI 依赖是可选 extra，CLI 与报告不依赖 Gradio。
+**Q：能否只用 CLI，不安装 Web 前端？**
+A：可以。GUI 依赖是可选 extra（fastapi + uvicorn，体积远小于原 Gradio），CLI 与报告不依赖它。
 
 **Q：报告能直接发邮件吗？**
 A：可以。`report.html` 自包含，无外网依赖；图表为内嵌 SVG。原始数据目录较大，按需单独打包。

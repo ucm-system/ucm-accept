@@ -28,7 +28,7 @@ from .models import (
     AccuracyDetail,
     AccuracyRun,
     ItemResult,
-    SlaDetail,
+    PerfDetail,
     SlaTarget,
     Status,
     human_duration,
@@ -39,7 +39,7 @@ from .report import render_report
 from .utils import ensure_dir, new_run_id, relative_artifact, set_latest_pointer, write_json_atomic
 
 # 兼容“精度数据集配置里没有显式 limit”的情况
-_FALLBACK_LIMIT = 100
+_FALLBACK_LIMIT = 0  # 0 = 全量（不向 evalscope 传 --limit）
 
 
 class Orchestrator:
@@ -250,7 +250,8 @@ class Orchestrator:
         hit_rate = float(self.config.get("defaults.hit_rate", 0.0) or 0.0)
         prefix_length = int(round(max_prompt * max(0.0, min(1.0, hit_rate)))) if hit_rate > 0 else 0
         return PerfParams(
-            parallel=list(parallel or self.config.get("perf.parallel", [20])),
+            prefix_count=int(self.config.get("perf.prefix_count", 32)),
+            parallel=list(parallel or self.config.get("perf.parallel", [8])),
             number=int(number or self.config.get("perf.number", 200)),
             min_prompt_length=min_prompt,
             max_prompt_length=max_prompt,
@@ -266,18 +267,86 @@ class Orchestrator:
         )
 
     def _run_perf(self, item: ItemResult, *, scenario: str | None = None) -> None:
-        params = self._perf_params()
+        # 支持多组压测数据（perf.groups：每组独立并发/请求数/输入/输出/命中率/前缀种数），
+        # 逐组执行 EvalScope perf 并聚合为一张性能曲线；未配置时回退为全局单组。
+        groups = self.config.get("perf.groups", []) or []
+        if not groups:
+            groups = [
+                {
+                    "parallel": self.config.get("perf.parallel", [8]),
+                    "number": self.config.get("perf.number", 64),
+                    "input": self.config.get("perf.max_prompt_length", 65536),
+                    "output": self.config.get("perf.max_tokens", 512),
+                    "prefix_ratio": self.config.get("defaults.hit_rate", 0.9),
+                    "prefix_count": self.config.get("perf.prefix_count", 32),
+                }
+            ]
         output_dir = ensure_dir(self.raw_root / "perf")
         log = self._log_fn()
-        self._emit(
-            f"调用 EvalScope perf：并发 {params.parallel}，请求 {params.number}，"
-            f"输入 {params.max_prompt_length} tokens",
-            level="info",
-            fraction=0.05,
+        context = int(self.config.get("defaults.context_length", 65536))
+        detail = PerfDetail(
+            context_length=context,
+            config={
+                "口径": "多组压测（每组独立执行 EvalScope perf，逐组聚合）",
+                "groups": len(groups),
+            },
         )
-        detail = self.engine.run_perf(self._endpoint(), params, output_dir, log, self.cancel_event)
+        total_points = 0
+        for group in groups:
+            try:
+                parallel = [int(v) for v in (group.get("parallel") or [8])]
+            except (TypeError, ValueError):
+                raise UCMAcceptError(
+                    f"并发配置非法：{group.get('parallel')!r}"
+                ) from None
+            total_points += len(parallel)
+        done_points = 0
+        for index, group in enumerate(groups):
+            try:
+                parallel = [int(v) for v in (group.get("parallel") or [8])]
+            except (TypeError, ValueError):
+                raise UCMAcceptError(
+                    f"并发配置非法：{group.get('parallel')!r}"
+                ) from None
+            number = max(1, int(group.get("number", 64)))
+            inp = int(group.get("input", 65536))
+            out = int(group.get("output", 512))
+            ratio = float(group.get("prefix_ratio", 0.9) or 0)
+            prefix_length = round(inp * max(0.0, min(1.0, ratio))) if ratio > 0 else 0
+            prefix_count = int(group.get("prefix_count", 32))
+            # 每个并发点独立执行 + 独立子目录：evalscope 多梯度共用 outputs 目录时
+            # 会触发 benchmark_data.db FileExistsError
+            for conc in parallel:
+                self._check_cancel()
+                params = self._perf_params(parallel=[conc], number=number)
+                params.min_prompt_length = params.max_prompt_length = inp
+                params.min_tokens = params.max_tokens = out
+                params.prefix_length = prefix_length
+                params.prefix_count = prefix_count
+                self._emit(
+                    f"第 {index + 1} 组：并发 {conc}，请求 {number}，输入 {inp}，输出 {out}，"
+                    f"命中率 {percent(ratio)}（前缀 {prefix_length} tokens）",
+                    level="info",
+                    fraction=(done_points + 0.05) / total_points,
+                )
+                sub = self.engine.run_perf(
+                    self._endpoint(), params,
+                    ensure_dir(output_dir / f"group{index + 1}" / f"c{conc}"),
+                    log, self.cancel_event,
+                )
+                done_points += 1
+                detail.points.extend(sub.points)
+                detail.config.setdefault("source", sub.config.get("source", "evalscope"))
+                detail.config[f"group{index + 1}_c{conc}"] = sub.config
         self._set_detail(item, detail.to_dict())
-        self._attach_command(item, output_dir)
+        for group_index in range(len(groups)):
+            for conc_dir in sorted((output_dir / f"group{group_index + 1}").glob("c*")):
+                self._attach_command(item, conc_dir,
+                                     key=f"command_group{group_index + 1}_{conc_dir.name}")
+        # 顶层 command 取第一个并发点（兼容报告字段）
+        first_point = next(iter(sorted((output_dir / "group1").glob("c*"))), None)
+        if first_point is not None:
+            self._attach_command(item, first_point)
         item.artifacts["原始输出目录"] = relative_artifact(output_dir, self.run_dir)
         summary_file = output_dir / "ucm_perf.json"
         if summary_file.exists():
@@ -300,7 +369,8 @@ class Orchestrator:
             item.status = Status.PASSED
             item.summary = (
                 f"{primary.concurrency} 并发：吞吐 {primary.throughput_tok_s:.0f} tok/s，"
-                f"TTFT.P90 {primary.ttft_p90_ms / 1000:.2f}s，TPOT.P90 {primary.tpot_p90_ms:.1f}ms，"
+                f"TTFT avg {primary.ttft_avg_ms / 1000:.2f}s / P99 {primary.ttft_p99_ms / 1000:.2f}s，"
+                f"TPOT avg {primary.tpot_avg_ms:.1f}ms / P99 {primary.tpot_p99_ms:.1f}ms，"
                 f"成功率 {percent(min(rates))}"
             )
         if len(detail.points) > 1:
@@ -308,17 +378,109 @@ class Orchestrator:
         self._emit(item.summary, level="success" if item.status == Status.PASSED else "warning", fraction=1.0)
 
     # -------------------------------------------------------------- multiturn
-    def _run_multiturn(self, item: ItemResult, *, scenario: str | None = None) -> None:
-        key = scenario or str(self.config.get("multiturn.scenario", "dialogue"))
+    def _run_multiturn(self, item: ItemResult, *, scenario: str | list[str] | None = None) -> None:
+        """执行多轮对话测试；scenario 可为单键或多键列表（多场景顺序执行后聚合）。"""
+        keys = [scenario] if isinstance(scenario, str) else list(scenario or [])
+        if not keys:
+            keys = [str(k) for k in (self.config.get("multiturn.scenarios_selected", []) or [])]
+        if not keys:
+            keys = [str(self.config.get("multiturn.scenario", "dialogue"))]
         presets = self.config.get("multiturn.scenarios", {}) or {}
-        if key not in presets:
-            raise UCMAcceptError(f"未知多轮对话预设：{key}")
+        unknown = [key for key in keys if key not in presets]
+        if unknown:
+            raise UCMAcceptError(f"未知多轮对话预设：{'、'.join(unknown)}")
+        if len(keys) > 1:
+            scenario_results = []
+            total_conversations = 0
+            total_turns = 0
+            total_success = 0
+            worst_completion = 1.0
+            cache_hits = []
+            sub_outputs = []
+            fraction_span = 1.0 / len(keys)
+            for index, key in enumerate(keys):
+                self._fraction = 0.0
+                self._overall_base = 0.0
+                self._overall_span = 1.0
+                sub_item = ItemResult(key=item.key, name=item.name, status=Status.RUNNING, started_at=iso_now())
+                self._run_single_multiturn(sub_item, key, presets[key], fraction=0.05 + index * fraction_span * 0.9)
+                scenario_results.append({
+                    "key": key,
+                    "label": str(presets[key].get("label", key)),
+                    "status": sub_item.status.value,
+                    "summary": sub_item.summary,
+                    "detail": sub_item.detail,
+                })
+                total_conversations += sub_item.detail.get("load_total_conversations", 0)
+                total_turns += sub_item.detail.get("total_turns", 0)
+                total_success += sub_item.detail.get("load_success_conversations", 0)
+                completion = sub_item.detail.get("completion_rate", 0.0) or 0.0
+                worst_completion = min(worst_completion, completion)
+                if sub_item.detail.get("cache_hit_rate") is not None:
+                    cache_hits.append(sub_item.detail["cache_hit_rate"])
+                if sub_item.status in {Status.FAILED, Status.WARNING}:
+                    item.status = sub_item.status
+                sub_outputs.append(str(self.raw_root / "multiturn" / key))
+            item.detail = {
+                "scenarios": scenario_results,
+                "scenario_keys": keys,
+                "load_total_conversations": total_conversations,
+                "total_turns": total_turns,
+                "load_success_conversations": total_success,
+                "completion_rate": total_success / total_conversations if total_conversations else 0.0,
+                "cache_hit_rate": (sum(cache_hits) / len(cache_hits)) if cache_hits else None,
+            }
+            labels = "、".join(str(presets[k].get("label", k)) for k in keys)
+            completion = item.detail["completion_rate"]
+            if item.status == Status.FAILED:
+                item.summary = "多轮会话全部失败"
+            elif completion <= 0:
+                item.status = Status.FAILED
+                item.summary = "多轮会话全部失败"
+            elif completion < 0.99 or item.status == Status.WARNING:
+                item.status = Status.WARNING
+                item.summary = f"多场景（{labels}）完成率 {percent(completion)}"
+            else:
+                item.status = Status.PASSED
+                item.summary = (
+                    f"多场景（{labels}）：{total_conversations} 组会话、{total_turns} 轮，"
+                    f"完成率 {percent(completion)}"
+                )
+                if cache_hits:
+                    item.summary += f"，缓存命中 {percent(sum(cache_hits) / len(cache_hits))}"
+            item.artifacts["原始输出目录"] = relative_artifact(ensure_dir(self.raw_root / "multiturn"), self.run_dir)
+            write_json_atomic(self.item_dir / "multiturn.json", item.to_dict())
+            self._emit(item.summary, level="success" if item.status == Status.PASSED else "warning", fraction=1.0)
+            return
+        key = keys[0]
         preset = presets[key]
-        dataset_path = self.config.resolve_asset(preset.get("dataset_path", ""))
+        self._run_single_multiturn(item, key, preset)
+
+    def _run_single_multiturn(self, item: ItemResult, key: str, preset: dict[str, Any], *, fraction: float | None = None) -> None:
+        dataset_path = self.config.resolve_asset(preset.get("dataset_path", "")) if preset.get("dataset_path") else None
+        # swe_smith live 构建默认首轮 65K tokens：按被测模型可用上下文自适应缩放，
+        # 避免请求超出模型上限被 400 拒绝
+        extra_args = [str(arg) for arg in (self.config.get("multiturn.extra_args", []) or [])]
+        if str(preset.get("dataset", "")) == "swe_smith":
+            try:
+                detected = self.engine.detect_context(self._endpoint())
+            except Exception:  # noqa: BLE001 - 探测失败时保守取值
+                detected = None
+            usable = min(detected or 32768, 65000)
+            first_turn = max(512, int(usable * 0.75))
+            extra_args += [
+                "--multi-turn-args",
+                json.dumps({"first_turn_length": first_turn,
+                            "subsequent_turn_length": 500,
+                            "chars_per_token": 3.0}),
+            ]
+            self._emit(f"swe_smith live 构建：按可用上下文 {detected} 自适应首轮 {first_turn} tokens", level="info")
         params = MultiturnParams(
             scenario_key=key,
             scenario_label=str(preset.get("label", key)),
+            dataset_name=str(preset.get("dataset", "") or ""),
             dataset_path=dataset_path,
+            tokenizer_path=str(self.config.get("perf.tokenizer_path", "") or ""),
             parallel=int(self.config.get("multiturn.parallel", 4)),
             conversations=int(self.config.get("multiturn.conversations", 12)),
             min_turns=int(self.config.get("multiturn.min_turns", 2)),
@@ -326,7 +488,7 @@ class Orchestrator:
             min_tokens=int(self.config.get("multiturn.min_tokens", 128)),
             max_tokens=int(self.config.get("multiturn.max_tokens", 512)),
             request_timeout_s=int(self.config.get("multiturn.request_timeout_s", 180)),
-            extra_args=[str(arg) for arg in (self.config.get("multiturn.extra_args", []) or [])],
+            extra_args=extra_args,
         )
         output_dir = ensure_dir(self.raw_root / "multiturn" / key)
         self._emit(
@@ -362,94 +524,58 @@ class Orchestrator:
 
     # -------------------------------------------------------------------- SLA
     def _run_sla(self, item: ItemResult, *, scenario: str | None = None) -> None:
+        thresholds = {
+            key: float(value)
+            for key, value in {
+                "avg_ttft_s": self.config.get("sla.thresholds.avg_ttft_s"),
+                "avg_tpot_ms": self.config.get("sla.thresholds.avg_tpot_ms"),
+                "p99_ttft_s": self.config.get("sla.thresholds.p99_ttft_s"),
+                "p99_tpot_ms": self.config.get("sla.thresholds.p99_tpot_ms"),
+            }.items()
+            if value not in (None, "", 0)
+        }
         target = SlaTarget(
-            context_length=int(self.config.get("sla.target.context_length", 65536)),
-            concurrency=int(self.config.get("sla.target.concurrency", 200)),
-            ttft_p90_ms=float(self.config.get("sla.target.ttft_p90_ms", 10000)),
-            tpot_p90_ms=float(self.config.get("sla.target.tpot_p90_ms", 50)),
+            input_length=int(self.config.get("sla.input_length", 65536)),
+            output_tokens=int(self.config.get("sla.output_tokens", 512)),
+            prefix_ratio=float(self.config.get("sla.prefix_ratio", 0.9)),
+            prefix_count=int(self.config.get("sla.prefix_count", 8)),
+            concurrency=int(self.config.get("sla.target.concurrency", 256)),
+            thresholds=thresholds,
         )
         output_dir = ensure_dir(self.raw_root / "sla")
-        mode = str(self.config.get("sla.mode", "verify"))
-        if mode == "auto_tune":
+        mode = str(self.config.get("sla.mode", "auto_tune"))
+        if mode != "auto_tune":
+            raise UCMAcceptError(
+                "SLA 验收仅支持 auto_tune（EvalScope --sla-auto-tune 原生判定）；"
+                "请将 sla.mode 设为 auto_tune。"
+            )
+        if True:
             params = SlaNativeParams(
-                target_context=target.context_length,
+                target_context=target.input_length,
                 upper=int(self.config.get("sla.auto_tune.upper", target.concurrency)),
                 lower=int(self.config.get("sla.auto_tune.lower", 2)),
-                ttft_p90_ms=target.ttft_p90_ms,
-                tpot_p90_ms=target.tpot_p90_ms,
-                number=max(1, int(self.config.get("sla.verify.number", 200))),
+                number=max(1, int(self.config.get("sla.auto_tune.number", 200))),
                 num_runs=int(self.config.get("sla.auto_tune.num_runs", 1)),
                 number_multiplier=float(self.config.get("sla.auto_tune.number_multiplier", 2)),
+                output_tokens=target.output_tokens,
+                prefix_ratio=target.prefix_ratio,
+                prefix_count=target.prefix_count,
+                thresholds=target.thresholds,
                 tokenizer_path=self._tokenizer(),
                 variable=str(self.config.get("sla.auto_tune.variable", "parallel")),
                 extra_args=[str(arg) for arg in (self.config.get("sla.auto_tune.extra_args", []) or [])],
             )
-            self._emit("调用 EvalScope `perf --sla-auto-tune`（原生 p90_ttft / p90_tpot）…", fraction=0.05)
+            self._emit("调用 EvalScope `perf --sla-auto-tune`（avg / p99 口径）…", fraction=0.05)
             detail = self.engine.run_sla_native(
                 self._endpoint(), params, output_dir, self._log_fn(), self.cancel_event
             )
-        else:
-            number = int(self.config.get("sla.verify.number", 200))
-            params = self._perf_params(parallel=[target.concurrency], number=number)
-            params.min_prompt_length = target.context_length
-            params.max_prompt_length = target.context_length
-            params.min_tokens = 256
-            params.max_tokens = 256
-            params.warmup_num = int(self.config.get("sla.verify.warmup_num", 0))
-            self._emit(
-                f"调用 EvalScope perf 在 {target.concurrency} 并发、{target.context_length} 上下文下实测 P90 "
-                f"（请求 {number}）…",
-                fraction=0.05,
-            )
-            perf = self.engine.run_perf(
-                self._endpoint(), params, output_dir / "verify", self._log_fn(), self.cancel_event
-            )
-            point = next(
-                (candidate for candidate in perf.points if candidate.concurrency == target.concurrency),
-                max(perf.points, key=lambda candidate: candidate.concurrency) if perf.points else None,
-            )
-            target_met = bool(point and point.meets(target.ttft_p90_ms, target.tpot_p90_ms))
-            gaps: list[str] = []
-            if point is None:
-                gaps = ["未获得目标并发下的有效压测数据"]
-            else:
-                if point.ttft_p90_ms >= target.ttft_p90_ms:
-                    gaps.append(
-                        f"TTFT.P90 实测 {point.ttft_p90_ms / 1000:.2f}s，"
-                        f"未达到 <{target.ttft_p90_ms / 1000:.2f}s"
-                    )
-                if point.tpot_p90_ms >= target.tpot_p90_ms:
-                    gaps.append(
-                        f"TPOT.P90 实测 {point.tpot_p90_ms:.1f}ms，"
-                        f"未达到 <{target.tpot_p90_ms:.1f}ms"
-                    )
-            detail = SlaDetail(
-                target=target,
-                strategy="verify",
-                target_met=target_met,
-                satisfiable=target_met,
-                recommended_concurrency=target.concurrency if target_met else None,
-                probes=[point] if point else [],
-                best=point if target_met else None,
-                gaps=gaps,
-                note=(
-                    f"直接采用 EvalScope perf 在 {target.concurrency} 并发的实测 P90 判定，"
-                    "未做任何自研并发搜索；如需建议并发，可切换到 auto_tune 模式。"
-                ),
-                output_dir=str(output_dir / "verify"),
-            )
-            write_json_atomic(output_dir / "verify" / "ucm_sla.json", detail.to_dict())
         self._set_detail(item, detail.to_dict())
-        self._attach_command(item, output_dir if mode == "auto_tune" else output_dir / "verify")
-        item.artifacts["原始输出目录"] = relative_artifact(
-            output_dir if mode == "auto_tune" else output_dir / "verify", self.run_dir
-        )
-        sla_file = (output_dir if mode == "auto_tune" else output_dir / "verify") / "ucm_sla.json"
+        self._attach_command(item, output_dir)
+        item.artifacts["原始输出目录"] = relative_artifact(output_dir, self.run_dir)
+        sla_file = output_dir / "ucm_sla.json"
         if sla_file.exists():
             item.artifacts["归一化结果"] = relative_artifact(sla_file, self.run_dir)
-        self._collect_native_artifacts(
-            item, output_dir if mode == "auto_tune" else output_dir / "verify"
-        )
+        self._collect_native_artifacts(item, output_dir)
         point = next(
             (probe for probe in detail.probes if probe.concurrency == target.concurrency),
             detail.best or (detail.probes[0] if detail.probes else None),
@@ -458,8 +584,9 @@ class Orchestrator:
             item.status = Status.PASSED
             if point and point.concurrency == target.concurrency:
                 item.summary = (
-                    f"{target.concurrency} 并发达标：TTFT.P90 {point.ttft_p90_ms / 1000:.2f}s，"
-                    f"TPOT.P90 {point.tpot_p90_ms:.1f}ms"
+                    f"{target.concurrency} 并发达标：TTFT avg {point.ttft_avg_ms / 1000:.2f}s / "
+                    f"P99 {point.ttft_p99_ms / 1000:.2f}s，TPOT avg {point.tpot_avg_ms:.1f}ms / "
+                    f"P99 {point.tpot_p99_ms:.1f}ms"
                 )
             else:
                 item.summary = f"{target.concurrency} 并发满足 SLA（EvalScope 原生自动调优结果）"
@@ -467,7 +594,7 @@ class Orchestrator:
             item.status = Status.WARNING
             item.summary = (
                 f"{target.concurrency} 并发未达标；EvalScope 原生自动调优建议并发 "
-                f"{detail.recommended_concurrency}（p90_ttft / p90_tpot 口径）"
+                f"{detail.recommended_concurrency}（avg / p99 口径）"
             )
         else:
             item.status = Status.FAILED
@@ -536,19 +663,23 @@ class Orchestrator:
             note="每项执行两遍，偏差用于核验 KVCache 落盘/读取是否引入精度损失。",
         )
         commands: list[dict[str, Any]] = []
+        # 按用户口径：两轮 = 先跑完一轮全部数据集，再跑第二轮全部数据集
+        dataset_objects: dict[str, AccuracyDataset] = {}
         for key, cfg in datasets_cfg.items():
-            dataset = AccuracyDataset(
+            dataset_objects[key] = AccuracyDataset(
                 key=key,
                 label=str(cfg.get("label", key)),
                 dataset=str(cfg.get("dataset", key)),
                 subset=str(cfg.get("subset", "") or ""),
                 description=str(cfg.get("description", "")),
             )
-            for run_index in range(1, runs_per_dataset + 1):
+        for run_index in range(1, runs_per_dataset + 1):
+            for key, cfg in datasets_cfg.items():
+                dataset = dataset_objects[key]
                 self._check_cancel()
                 step += 1
                 self._emit(
-                    f"精度测试 {dataset.label} 第 {run_index}/{runs_per_dataset} 遍",
+                    f"精度测试 第 {run_index}/{runs_per_dataset} 轮 · {dataset.label}",
                     fraction=step / total_steps * 0.95,
                 )
                 run_dir = ensure_dir(output_dir / key / f"run{run_index}")
@@ -566,7 +697,7 @@ class Orchestrator:
                     raise
                 except Exception as exc:  # noqa: BLE001 - 单次数据集失败仍继续其余项
                     run = AccuracyRun(index=run_index, error=str(exc))
-                    self._emit(f"{dataset.label} 第 {run_index} 遍失败：{exc}", level="error")
+                    self._emit(f"{dataset.label} 第 {run_index} 轮失败：{exc}", level="error")
                 dataset.runs.append(run)
                 command_file = run_dir / "command.txt"
                 if command_file.exists():
@@ -580,6 +711,7 @@ class Orchestrator:
                         )
                     except OSError:
                         pass
+        for dataset in dataset_objects.values():
             dataset.recompute()
             dataset.stable = bool(
                 runs_per_dataset >= 2
@@ -648,11 +780,18 @@ class Orchestrator:
                 f"可用上下文 {detected} < 目标 {target}，切换为 EvalScope AgentX smoke 模式",
                 level="warning",
             )
+        duration_s = int(self.config.get("agent.duration_s", 900))
+        if not degraded and duration_s < 900:
+            self._emit(
+                f"AgentX benchmark 模式要求持续时长 ≥ 900 秒，已将 {duration_s} 秒提升为 900 秒（15 分钟）",
+                level="warning",
+            )
+            duration_s = 900
         params = AgentParams(
             target_context=target,
             context_detected=detected,
             parallel=int(self.config.get("agent.parallel", 4)),
-            duration_s=int(self.config.get("agent.duration_s", 900)),
+            duration_s=duration_s,
             degraded=degraded,
             degraded_mode=str(self.config.get("agent.degraded.mode", "smoke")),
             degraded_parallel=int(self.config.get("agent.degraded.parallel", 1)),
@@ -716,7 +855,7 @@ class Orchestrator:
                     item.artifacts[label] = relative_artifact(matches[0], self.run_dir)
                     break
 
-    def _attach_command(self, item: ItemResult, output_dir: Path) -> None:
+    def _attach_command(self, item: ItemResult, output_dir: Path, *, key: str = "command") -> None:
         command_file = output_dir / "command.txt"
         if command_file.exists():
             try:
@@ -724,7 +863,7 @@ class Orchestrator:
             except OSError:
                 command = ""
             if command:
-                item.detail["command"] = command
+                item.detail[key] = command
                 item.artifacts["EvalScope 执行命令"] = relative_artifact(command_file, self.run_dir)
 
     @staticmethod

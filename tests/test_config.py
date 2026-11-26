@@ -25,7 +25,7 @@ def test_partial_user_config_is_merged(tmp_path: Path):
     cfg = Config.load(path)
     assert cfg.get("endpoint.base_url") == "http://10.0.0.1:9000/v1"
     assert cfg.get("perf.number") == 12
-    assert cfg.get("sla.target.concurrency") == 200
+    assert cfg.get("sla.target.concurrency") == 256
 
 
 def test_env_expansion(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

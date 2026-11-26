@@ -62,7 +62,7 @@ TEST_ITEMS: tuple[TestItemMeta, ...] = (
         key="perf",
         name="基础性能测试",
         short="性能",
-        description="64K 上下文下测量吞吐、TTFT、TPOT 与总延迟，并绘制并发趋势。",
+        description="多组配置实测吞吐、TTFT、TPOT 与总延迟（并发/请求数/输入/输出/命中率/前缀种数均可配置），逐组执行并绘制并发趋势。",
         eta="约 5 分钟",
         icon="⚡",
         order=1,
@@ -71,7 +71,7 @@ TEST_ITEMS: tuple[TestItemMeta, ...] = (
         key="multiturn",
         name="多轮对话测试",
         short="多轮对话",
-        description="由 EvalScope 多轮压测执行对话 / 代码 / 办公预设，统计完成率、延迟与缓存命中。",
+        description="由 EvalScope 多轮压测执行内置数据集（ShareGPT / SWE-smith / trie 轨迹等，可多选），统计完成率、延迟与缓存命中。",
         eta="约 10 分钟",
         icon="💬",
         order=2,
@@ -80,7 +80,7 @@ TEST_ITEMS: tuple[TestItemMeta, ...] = (
         key="sla",
         name="SLA 自动调优",
         short="SLA",
-        description="EvalScope --sla-auto-tune 按 P90 自动搜索满足 TTFT<10s、TPOT<50ms 的最高并发。",
+        description="EvalScope --sla-auto-tune 按 avg / P99 阈值自动搜索满足 SLA 的最高并发；判定完全由 EvalScope 原生完成。",
         eta="约 8 分钟",
         icon="🎯",
         order=3,
@@ -89,7 +89,7 @@ TEST_ITEMS: tuple[TestItemMeta, ...] = (
         key="accuracy",
         name="精度测试",
         short="精度",
-        description="GPQA、GSM8K、LongBench-v2、BFCL-v3 各跑两遍，核验 KVCache 落盘一致性。",
+        description="GPQA、GSM8K、LongBench-v2、BFCL-v3 各跑两轮，核验 KVCache 落盘一致性；BFCL 需服务启用工具调用（vLLM：--enable-auto-tool-choice --tool-call-parser hermes）。",
         eta="约 20 分钟",
         icon="📊",
         order=4,
@@ -98,7 +98,7 @@ TEST_ITEMS: tuple[TestItemMeta, ...] = (
         key="agent",
         name="Agent 场景测试",
         short="Agent",
-        description="EvalScope AgentX 256K 长会话服务级压测；上下文不足时降级 smoke 并标注。",
+        description="EvalScope AgentX 长会话服务级压测（数据集支持 256K / full 变体）。要求模型服务上下文不低于数据集所需；不足时自动降级为 smoke 模式跑通完整流程并在报告中标注（指标不作为验收结论）。",
         eta="约 15 分钟",
         icon="🤖",
         order=5,
@@ -168,10 +168,7 @@ class PerfPoint:
             return 1.0
         return self.success_requests / self.requests
 
-    def meets(self, ttft_p90_ms: float, tpot_p90_ms: float) -> bool:
-        return self.ttft_p90_ms > 0 and self.tpot_p90_ms > 0 and (
-            self.ttft_p90_ms < ttft_p90_ms and self.tpot_p90_ms < tpot_p90_ms
-        )
+
 
     def to_dict(self) -> dict[str, Any]:
         return to_jsonable(self)
@@ -201,10 +198,12 @@ class PerfDetail:
 
 @dataclass
 class SlaTarget:
-    context_length: int
+    input_length: int
+    output_tokens: int
+    prefix_ratio: float
+    prefix_count: int
     concurrency: int
-    ttft_p90_ms: float
-    tpot_p90_ms: float
+    thresholds: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return to_jsonable(self)
@@ -470,6 +469,29 @@ class AcceptanceReport:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps(self.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
         return target
+
+    @classmethod
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> AcceptanceReport:
+        """从 report.json 反序列化后的字典构建报告对象（上传对比用）。"""
+        items = {
+            key: ItemResult.from_dict(value)
+            for key, value in (data.get("items") or {}).items()
+        }
+        return cls(
+            run_id=data.get("run_id", ""),
+            mode=data.get("mode", "live"),
+            endpoint=data.get("endpoint", {}),
+            started_at=data.get("started_at", ""),
+            finished_at=data.get("finished_at", ""),
+            items=items,
+            selected=[str(key) for key in (data.get("selected") or [])],
+            conclusion=data.get("conclusion", "未完成"),
+            reasons=list(data.get("reasons") or []),
+            config_snapshot=data.get("config_snapshot") or {},
+            output_dir=data.get("output_dir", ""),
+            title=data.get("title", "UCM 推理加速产品验收报告"),
+        )
 
     @classmethod
     def load_json(cls, path: str | Path) -> AcceptanceReport:

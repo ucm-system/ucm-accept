@@ -218,7 +218,7 @@ jobs:
           mkdir -p offline/wheelhouse
           python -m pip install --upgrade pip wheel
           pip download --prefer-binary -d offline/wheelhouse \
-            "evalscope[perf,service]>=1.15,<2" "gradio>=6.0,<7" "PyYAML>=6"
+            "evalscope[perf,service]>=1.15,<2" "gradio>=6.0,<7" "PyYAML>=6" "wheel" "setuptools"
           # 少数包（如 jieba）只发源码包；在构建机先转成 wheel，保证客户现场不用编译器。
           find offline/wheelhouse -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' \) -print0 \
             | xargs -0 -r -n1 python -m pip wheel --no-deps --wheel-dir offline/wheelhouse

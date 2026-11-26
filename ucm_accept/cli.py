@@ -4,6 +4,7 @@ import argparse
 import os
 import re
 import shutil
+import signal
 import sys
 from pathlib import Path
 
@@ -79,7 +80,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="只执行指定测试项，逗号分隔，可用编号或名称，例如 perf,sla 或 1,3",
     )
     parser.add_argument("--save-config", help="把当前生效配置另存为 YAML 后退出（API Key 不落盘）")
-    parser.add_argument("--scenario", choices=["dialogue", "code", "office"], help="多轮对话场景预设")
+    try:
+        _scenario_keys = list((load_config(None).get("multiturn.scenarios", {}) or {}).keys())
+    except Exception:  # noqa: BLE001 - 配置不可读时退化为自由文本
+        _scenario_keys = None
+    parser.add_argument(
+        "--scenario",
+        choices=_scenario_keys,
+        help="多轮对话场景预设（来自 config multiturn.scenarios）",
+    )
     parser.add_argument("--all", action="store_true", help="按配置 run.items 的范围顺序执行验收")
     parser.add_argument("--sla-mode", choices=["verify", "auto_tune"], help="覆盖 SLA 模式")
     parser.add_argument("--report", help="将本次 HTML 报告另存到指定路径")
@@ -264,7 +273,8 @@ def _run_noninteractive(service: AcceptanceService, args: argparse.Namespace) ->
             print(f"单项结果：{item.name} · {STATUS_LABELS[item.status]}")
     except KeyboardInterrupt:
         service.cancel()
-        print(YELLOW("\n已中断验收。原始数据仍保留在输出目录。"))
+        service.shutdown(timeout=10.0)
+        print(YELLOW("\n已中断验收。报告与原始数据已保存到输出目录。"))
         return 130
     except UCMAcceptError as exc:
         print(RED(f"执行失败：{exc}"))
@@ -372,7 +382,10 @@ def _interactive(service: AcceptanceService, args: argparse.Namespace) -> int:
                     _print_report_summary(report, service.report_path())
             except KeyboardInterrupt:
                 service.cancel()
-                print(YELLOW("\n已中断当前验收。"))
+                service.shutdown(timeout=10.0)
+                report = service.current_report()
+                _print_report_summary(report, service.report_path())
+                print(YELLOW("\n已中断当前验收。报告与原始数据已保存到输出目录。"))
             except UCMAcceptError as exc:
                 print(RED(f"执行失败：{exc}"))
                 if "EvalScope" in str(exc):
@@ -438,9 +451,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.doctor:
         return _doctor(config, args)
     if args.gui:
-        from .gui import main as gui_main
+        from .webapp import main as web_main
 
-        return gui_main(
+        return web_main(
             config=config,
             mode="mock" if args.mock else "live",
             mock_profile=args.profile,
@@ -462,6 +475,18 @@ def main(argv: list[str] | None = None) -> int:
         mock_profile=args.profile,
         mock_delay_ms=0 if args.fast else None,
     )
+    # SIGTERM（终端关闭 / kill）：停止当前任务、终止子进程并落盘报告
+    def _graceful(signum: int, _frame: object) -> None:
+        service.shutdown(timeout=10.0)
+        print(YELLOW("\n收到退出信号，验收已中断，报告与原始数据已保存到输出目录。"))
+        raise SystemExit(130)
+
+    for _sig in (signal.SIGTERM,):
+        try:
+            signal.signal(_sig, _graceful)
+        except (ValueError, OSError):  # noqa: BLE001 - 非主线程等场景忽略
+            pass
+
     if args.all or args.item or args.items:
         return _run_noninteractive(service, args)
     return _interactive(service, args)

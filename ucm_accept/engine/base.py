@@ -79,6 +79,7 @@ class PerfParams:
     min_tokens: int
     max_tokens: int
     prefix_length: int = 0
+    prefix_count: int = 0
     tokenizer_path: str = ""
     warmup_num: int = 0
     request_timeout_s: int = 21600
@@ -92,13 +93,17 @@ class PerfParams:
 class MultiturnParams:
     scenario_key: str
     scenario_label: str
-    dataset_path: Path
+    # dataset_name：EvalScope 内置多轮场景名（share_gpt_*_multi_turn / swe_smith / trie_*）；
+    # dataset_path：自定义 jsonl（custom_multi_turn）。二选一，name 优先。
+    dataset_name: str
+    dataset_path: Path | None
     parallel: int
     conversations: int
     min_turns: int
     max_turns: int
     min_tokens: int
     max_tokens: int
+    tokenizer_path: str = ""
     request_timeout_s: int = 180
     extra_args: list[str] = field(default_factory=list)
 
@@ -136,11 +141,14 @@ class SlaNativeParams:
     target_context: int
     upper: int
     lower: int
-    ttft_p90_ms: float
-    tpot_p90_ms: float
     number: int
     num_runs: int
     number_multiplier: float
+    # 压测口径与达标阈值（avg/p99 任意档位组合；ttft 单位秒，tpot 单位毫秒）
+    output_tokens: int = 512
+    prefix_ratio: float = 0.9
+    prefix_count: int = 8
+    thresholds: dict[str, float] = field(default_factory=dict)
     tokenizer_path: str = ""
     variable: str = "parallel"
     extra_args: list[str] = field(default_factory=list)
